@@ -1,0 +1,188 @@
+{
+  "AI융합학부": {
+    "AI전공": [
+      {
+        "from": "이산수학",
+        "to": "자료구조",
+        "importance": 5,
+        "note": "이거 없으면 자료구조/알고리즘 따라가기 매우 힘듦"
+      },
+      {
+        "from": "이산수학",
+        "to": "컴퓨터구조",
+        "importance": 5,
+        "note": ""
+      },
+      {
+        "from": "이산수학",
+        "to": "알고리즘",
+        "importance": 5,
+        "note": ""
+      },
+      {
+        "from": "인공지능수학",
+        "to": "기계학습",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "파이썬프로그래밍",
+        "to": "고급파이썬프로그래밍",
+        "importance": 4,
+        "note": "파이썬은 필수교양이니 1학년 때 들을 것"
+      },
+      {
+        "from": "C++프로그래밍",
+        "to": "고급C++프로그래밍",
+        "importance": 2,
+        "note": "코딩 좀 아는 사람은 기본 건너뛰고 고급 들어도 됨"
+      },
+      {
+        "from": "고급파이썬프로그래밍",
+        "to": "심층학습",
+        "importance": 2,
+        "note": "심층학습 코드 이해에 조금 도움주는 수준"
+      },
+      {
+        "from": "기계학습",
+        "to": "고급기계학습",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "기계학습",
+        "to": "심층학습",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "기계학습",
+        "to": "강화학습",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "기계학습",
+        "to": "추천시스템",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "자료구조",
+        "to": "자료구조실습",
+        "importance": 4,
+        "note": ""
+      },
+      {
+        "from": "자료구조",
+        "to": "알고리즘",
+        "importance": 4,
+        "note": ""
+      },
+      {
+        "from": "자바프로그래밍",
+        "to": "모바일프로그래밍",
+        "importance": 1,
+        "note": ""
+      },
+      {
+        "from": "데이터베이스",
+        "to": "빅데이터분석",
+        "importance": 1,
+        "note": ""
+      },
+      {
+        "from": "심층학습",
+        "to": "심층학습프로젝트",
+        "importance": 4,
+        "note": ""
+      },
+      {
+        "from": "자연어처리",
+        "to": "생성형AI프로젝트",
+        "importance": 4,
+        "note": ""
+      },
+      {
+        "from": "강화학습",
+        "to": "지능형게임",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "-",
+        "to": "캡스톤디자인",
+        "importance": 5,
+        "note": "4학년 때 무조건 들을 것 (선이수 무관)"
+      },
+      {
+        "from": "-",
+        "to": "생성형AI프로젝트",
+        "importance": 5,
+        "note": "4학년 때 무조건 들을 것 (선이수 무관)"
+      },
+      {
+        "from": "-",
+        "to": "융합캡스톤디자인",
+        "importance": 5,
+        "note": "4학년 때 무조건 들을 것 (선이수 무관)"
+      },
+      {
+        "from": "-",
+        "to": "취업및창업특강",
+        "importance": 5,
+        "note": "4학년 때 무조건 들을 것 (선이수 무관)"
+      }
+    ],
+    "IoT/시스템전공": [
+      {
+        "from": "IoT기본실습",
+        "to": "IoT네트워크",
+        "importance": 3,
+        "note": "로드맵 그대로"
+      },
+      {
+        "from": "IoT창의공학설계",
+        "to": "IoT네트워크",
+        "importance": 3,
+        "note": "로드맵 그대로"
+      },
+      {
+        "from": "IoT네트워크",
+        "to": "IoT시스템설계",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "IoT시스템설계",
+        "to": "고급IoT시스템설계",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "IoT시스템설계",
+        "to": "모빌리티서비스",
+        "importance": 3,
+        "note": ""
+      },
+      {
+        "from": "-",
+        "to": "캡스톤디자인",
+        "importance": 5,
+        "note": "4학년 때 무조건 들을 것 (선이수 무관)"
+      },
+      {
+        "from": "-",
+        "to": "융합캡스톤디자인",
+        "importance": 5,
+        "note": "4학년 때 무조건 들을 것 (선이수 무관)"
+      },
+      {
+        "from": "-",
+        "to": "취업및창업특강",
+        "importance": 5,
+        "note": "4학년 때 무조건 들을 것 (선이수 무관)"
+      }
+    ]
+  }
+}
