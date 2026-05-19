@@ -16,7 +16,12 @@ def load_opened_courses(year: int, semester: int) -> pd.DataFrame:
         year = 2025
     file = DATA_DIR / f"opened_course{year}_{semester}.xlsx"
     return pd.read_excel(file, sheet_name=None)  # 시트 전체 로드
-
+ # 모든 시트의 컬럼명 공백 제거
+    for sheet_name in sheets:
+        if sheets[sheet_name] is not None:
+            sheets[sheet_name].columns = sheets[sheet_name].columns.str.strip()
+    return sheets
+    
 def load_roadmap() -> pd.DataFrame:
     """로드맵 로드"""
     file = DATA_DIR / "roadmap.xlsx"
