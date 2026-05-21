@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from data_loader import load_graduation_requirements, load_opened_courses
 from student import Student, MandatoryGE, CourseHistory
+from student import get_dept_aliases
+
 
 MANDATORY_GE_COURSES = {
     "IT계열": ["파이썬프로그래밍", "기초통계학", "미적분과벡터해석기초"],
@@ -73,23 +75,39 @@ class GraduationGap:
 
 
 def get_course_info(course_name, year, semester, student_dept):
-    """oped_course에서 과목 조회"""
+    """opened_course에서 과목 정보 조회"""
     sheets = load_opened_courses(year, semester)
+    #내 학과의 모든 데이터상 표기
+    dept_aliases = get_dept_aliases(student_dept)
+
     for sheet_name, df in sheets.items():
         if df is None or df.empty:
+            continue
+        # 컬럼명 공백 제거
+        df.columns = df.columns.str.strip()
+        if "교과목명" not in df.columns:
             continue
         matched = df[df["교과목명"].str.replace(" ", "", regex=False) == course_name.replace(" ", "")]
         if matched.empty:
             continue
-        dept_matched = matched[matched["개설학과전공"].str.replace(" ","", regex=False).str.contains(student_dept.replace(" ",""), na=False)]
-        row = dept_matched.iloc[0] if not dept_matched.empty else matched.iloc[0]
+        if "개설학과전공" not in df.columns:
+            row = matched.iloc[0]
+        else:
+            # 내 학과 alias 중 하나라도 매칭되면 우선 선택
+            개설학과_clean = matched["개설학과전공"].str.replace(" ", "", regex=False)
+            dept_matched = matched[개설학과_clean.apply(
+                lambda x: any(alias.replace(" ", "") in x or x in alias.replace(" ", "")
+                              for alias in dept_aliases)
+            )]
+            row = dept_matched.iloc[0] if not dept_matched.empty else matched.iloc[0]
         return {
             "이수구분": str(row.get("이수구분", "")).strip(),
             "영역": str(row.get("영역", "")).strip(),
             "학점": row.get("학점", 0),
-            "개설학과": str(row.get("개설학과전공", "")).replace(" ","")
+            "개설학과": str(row.get("개설학과전공", "")).replace(" ", "")
         }
     return None
+
 def add_major_credit(gap, 이수구분, credit, track, is_double_major_course):
     """
     전공 학점을 올바른 곳에 배분하는 함수
@@ -216,8 +234,13 @@ def calculate_gap(student: Student) -> GraduationGap:
             # 공과대학 통합 개설 강의
             is_college_wide = any(kw in 개설학과 for kw in COLLEGE_KEYWORDS)
 
-            # 내 학과 직접 개설 강의
-            is_my_dept = student_dept in 개설학과
+            # 내 학과 직접 개설 강의 (alias 포함 체크)
+            from student import get_dept_aliases
+            my_aliases = get_dept_aliases(student_dept)
+            is_my_dept = any(
+                alias.replace(" ", "") in 개설학과 or 개설학과 in alias.replace(" ", "")
+                for alias in my_aliases
+            )
 
             # 복수전공 학과 직접 개설 강의
             is_double_dept = double_dept and double_dept in 개설학과

@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 # AI융합학부 명칭 정규화
-AI_DEPT_ALIASES = {"AI융합학부", "AI", "지능형시스템"}
+AI_DEPT_ALIASES = {"AI융합학부", "AI", "지능형시스템","ioT","IoT"}
 # 학과명 변경 이력 정규화 (구 이름 → 현재 이름)
 DEPT_NAME_CHANGES = {
     "청정융합에너지공학과": "청정신소재공학과"
@@ -19,6 +19,13 @@ def normalize_dept(dept: str) -> str:
     if dept in DEPT_NAME_CHANGES:
         return DEPT_NAME_CHANGES[dept]
     return dept
+def get_dept_aliases(dept: str) -> set:
+    """학과의 데이터상 표기 목록 반환"""
+    aliases = {
+        "AI융합학부": {"AI융합학부", "AI", "지능형시스템", "IoT", "ioT"},
+        "청정신소재공학과": {"청정신소재공학과", "청정융합에너지공학과"},
+    }
+    return aliases.get(dept, {dept})
 
 def get_campus(dept: str) -> str:
     """학과 기준 캠퍼스 반환"""
