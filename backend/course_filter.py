@@ -272,7 +272,7 @@ def get_mandatory_slots(student: Student,target_semester: int) -> list[TimeSlot]
 # ── 동작 테스트 ───────────────────────────────────────────────────────
 if __name__ == "__main__":
     from student import Student, MandatoryGE, CourseHistory
-S
+
     student = Student(
         name="홍길동",
         dept="AI융합학부",
