@@ -19,10 +19,24 @@ def normalize_dept(dept: str) -> str:
     if dept in DEPT_NAME_CHANGES:
         return DEPT_NAME_CHANGES[dept]
     return dept
-def get_dept_aliases(dept: str) -> set:
+def get_dept_aliases(dept: str, original_dept:str=None) -> set:
+    """
+    학과의 데이터상 표기 목록 반환
+    AI융합학부는 AI트랙 / 지능형시스템(IoT)트랙을 구분해서 반환
+    original_dept: 정규화 전 원본 입력값 (트랙 구분에 사용)
+    """
+    # AI융합학부 트랙 구분
+    if dept == "AI융합학부":
+        raw = (original_dept or "").replace(" ", "")
+        if raw in {"지능형시스템", "IoT", "ioT"}:
+            # IoT 트랙 → 지능형시스템/IoT 개설 과목만
+            return {"AI융합학부", "지능형시스템", "IoT", "ioT"}
+        else:
+            # AI 트랙 (기본값) → AI 개설 과목만
+            return {"AI융합학부", "AI"}
     """학과의 데이터상 표기 목록 반환"""
     aliases = {
-        "AI융합학부": {"AI융합학부", "AI", "지능형시스템", "IoT", "ioT"},
+        #"AI융합학부": {"AI융합학부", "AI", "지능형시스템", "IoT", "ioT"},
         "청정신소재공학과": {"청정신소재공학과", "청정융합에너지공학과"},
     }
     return aliases.get(dept, {dept})
@@ -72,13 +86,15 @@ class Student:
     current_semester: int              # 현재 학기 (1 or 2)
     track: str                         # 전공심화 / 부전공 / 복수전공
     # student.py — Student 클래스에 추가
-    sub_track: Optional[str] = None  # AI융합학부 한정: "AI" or "IoT" / 다른 학과는 None    
+   # sub_track: Optional[str] = None  # AI융합학부 한정: "AI" or "IoT" / 다른 학과는 None    
     double_major_dept: Optional[str] = None   # 부/복수전공 학과
     history: list[CourseHistory] = field(default_factory=list)
     mandatory_ge: MandatoryGE = field(default_factory=MandatoryGE)
     retake_courses: list[str] = field(default_factory=list)  # 이번 학기 재수강 과목명
 
     def __post_init__(self):
+        self.original_dept = self.dept 
+        # 정규화 전 원본 저장 (AI트랙/IoT트랙 구분용)
         self.dept = normalize_dept(self.dept)
 
     @property

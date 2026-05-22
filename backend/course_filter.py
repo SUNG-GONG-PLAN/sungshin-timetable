@@ -1,3 +1,4 @@
+# course_filter.py
 # 역할: 개설강좌 로드 → 하드 필터링 → recommender.py에 넘길 DataFrame 반환
 #       + 시간/캠퍼스 충돌 감지 유틸 함수 제공
 #
@@ -137,7 +138,7 @@ def _is_relevant_course(row: pd.Series, student: Student) -> bool:
     if 이수구분 in ["핵심전공", "심화전공"]:
         if any(kw.replace(" ", "") in 개설학과 for kw in COLLEGE_KEYWORDS):
             return True
-        my_aliases = get_dept_aliases(student.dept)
+        my_aliases = get_dept_aliases(student.dept, student.original_dept)
         if any(
             alias.replace(" ", "") in 개설학과 or 개설학과 in alias.replace(" ", "")
             for alias in my_aliases
@@ -248,11 +249,15 @@ def filter_courses(
 
 
 # ── 1학년 필수배정 슬롯 추출 ──────────────────────────────────────────
-def get_mandatory_slots(student: Student,target_semester: int) -> list[TimeSlot]:
+def get_mandatory_slots(student: Student, target_semester: int) -> list[TimeSlot]:
     """
-    비사토·창사글 TimeSlot 반환 → recommender가 '확정된 자리'로 충돌 체크에 사용
-    캠퍼스는 student.campus (주전공 학과 캠퍼스) 자동 적용
-    전공별 진로탐색은 온라인이므로 슬롯 없음
+    비사토·창사글 중 target_semester에 배정된 것만 TimeSlot으로 반환
+    → recommender가 '확정된 자리'로 보고 충돌 체크에 사용
+
+    비사토·창사글은 학기당 하나씩 배정 (1학기 비사토↔2학기 창사글, 또는 반대)
+    target_semester와 일치하는 과목만 슬롯에 포함.
+    캠퍼스는 student.campus (주전공 학과 캠퍼스) 자동 적용.
+    전공별 진로탐색은 온라인이므로 슬롯 없음.
     """
     slots = []
     campus = student.campus
@@ -261,7 +266,7 @@ def get_mandatory_slots(student: Student,target_semester: int) -> list[TimeSlot]
     if (mge.bisato_semester == target_semester
             and mge.bisato_day and mge.bisato_block is not None):
         slots.append(TimeSlot(day=mge.bisato_day, block=mge.bisato_block, campus=campus))
- 
+
     if (mge.changsagl_semester == target_semester
             and mge.changsagl_day and mge.changsagl_block is not None):
         slots.append(TimeSlot(day=mge.changsagl_day, block=mge.changsagl_block, campus=campus))
@@ -306,7 +311,7 @@ if __name__ == "__main__":
     print(friday[["교과목명", "시간표", "off_day_penalty", "campus_pref_score"]].head(5).to_string())
 
     print("\n[필수배정 슬롯]")
-    for s in get_mandatory_slots(student):
+    for s in get_mandatory_slots(student, target_semester=1):
         print(f"  {s.day}요일 {s.block}블럭 ({s.campus}캠)")
 
     # 충돌 감지 함수 테스트

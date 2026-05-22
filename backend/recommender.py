@@ -37,7 +37,7 @@ class Timetable:
 
 
 # ── 데이터 로더 ───────────────────────────────────────────────────────
-def _load_roadmap(dept: str) -> dict[str, str]:
+def _load_roadmap(dept: str,sub_track:str=None) -> dict[str, str]:
     """
     로드맵에서 학과 시트 로드
     반환: {과목명(공백제거): 영역번호(int)}  ex) {"자료구조": 2}
@@ -365,20 +365,29 @@ def _generate_reason_tags(
     gap: GraduationGap,
     mandatory_slots: list[TimeSlot],
 ) -> list[str]:
+
     """
     규칙 기반 추천 이유 태그 생성
     LLM 대신 템플릿 방식 사용 (비용·속도 문제)
     """
     tags = []
     이수구분_list = [c.get("이수구분", "") for c in courses]
-    major_count = sum(1 for t in 이수구분_list if t in ["핵심전공", "심화전공"])
+    core_count     = sum(1 for t in 이수구분_list if t == "핵심전공")
+    advanced_count = sum(1 for t in 이수구분_list if t == "심화전공")
+    major_count    = core_count + advanced_count
     ge_count = len(이수구분_list) - major_count
     retake_count = sum(1 for c in courses if c.get("is_retake_target", False))
     off_penalty_count = sum(1 for c in courses if c.get("off_day_penalty", 0) > 0)
     total_credits = sum(c.get("학점_num", 0) for c in courses)
-
-    if gap.core_major_gap > 0 and major_count > 0:
-        tags.append(f"핵심전공 {major_count}과목 포함 — 졸업 필수 학점 충족에 도움")
+ 
+    if major_count > 0:
+        parts = []
+        if core_count > 0:
+            parts.append(f"핵심전공 {core_count}과목")
+        if advanced_count > 0:
+            parts.append(f"심화전공 {advanced_count}과목")
+        suffix = " — 졸업 필수 학점 충족에 도움" if gap.core_major_gap > 0 or gap.advanced_major_gap > 0 else ""
+        tags.append(f"{' / '.join(parts)} 포함{suffix}")
     if gap.missing_mandatory:
         missing_included = [
             c.get("교과목명") for c in courses
@@ -398,8 +407,9 @@ def _generate_reason_tags(
     if mandatory_slots:
         tags.append(f"비사토·창사글 시간({mandatory_slots[0].day}요일) 충돌 없이 구성")
     tags.append(f"총 {total_credits:.0f}학점")
-
+ 
     return tags
+    
 
 
 # ── 동작 테스트 ───────────────────────────────────────────────────────
