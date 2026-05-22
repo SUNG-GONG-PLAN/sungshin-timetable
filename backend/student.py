@@ -71,6 +71,8 @@ class Student:
     grade: int                         # 현재 학년
     current_semester: int              # 현재 학기 (1 or 2)
     track: str                         # 전공심화 / 부전공 / 복수전공
+    # student.py — Student 클래스에 추가
+    sub_track: Optional[str] = None  # AI융합학부 한정: "AI" or "IoT" / 다른 학과는 None    
     double_major_dept: Optional[str] = None   # 부/복수전공 학과
     history: list[CourseHistory] = field(default_factory=list)
     mandatory_ge: MandatoryGE = field(default_factory=MandatoryGE)
