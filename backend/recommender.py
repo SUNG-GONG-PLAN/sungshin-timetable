@@ -407,7 +407,7 @@ if __name__ == "__main__":
     from student import Student, MandatoryGE, CourseHistory
     from gap_calculator import calculate_gap
     from course_filter import filter_courses
-
+    '''
     student = Student(
         name="홍길동",
         dept="AI융합학부",
@@ -432,6 +432,56 @@ if __name__ == "__main__":
         off_days=["금"],
         campus_pref="수캠위주",
     )
+    '''
+    #실제 내 시간표
+    student = Student(
+        name="이세윤",
+        dept="AI",
+        student_id="20241245",
+        grade=3,
+        current_semester=1,
+        track="전공심화",
+        history=[
+            CourseHistory(2024, 1, "파이썬프로그래밍"),
+            CourseHistory(2024,1,"사회공헌활동의이해와전망"),
+            CourseHistory(2024,1,"소프트웨어융합기술개론"),
+            CourseHistory(2024,1,"비판적사고와토론"),
+            CourseHistory(2024,1,"AI와 서비스디자인"),
+            CourseHistory(2024,1,"디지털컨텐츠"),
+            CourseHistory(2024,2,"인공지능수학"),
+            CourseHistory(2024,2,"C++프로그래밍"),
+            CourseHistory(2024,2,"미적분과벡터해석기초"),
+            CourseHistory(2024,2,"창조적사고와글쓰기"),
+            CourseHistory(2024,2,"디지털금융의이해"),
+            CourseHistory(2025,1, "자료구조"),
+            CourseHistory(2025,1, "운영체제"),
+            CourseHistory(2025,1, "유전자과학과미래"),
+            CourseHistory(2025,1 , "기초 통계학"),
+            CourseHistory(2025, 1, "AI서비스설계"),
+            CourseHistory(2025, 1, "고급파이썬 프로그래밍"),
+            CourseHistory(2025,2 , "자연어처리"),
+            CourseHistory(2025,2 , "컴퓨터비전"),
+            CourseHistory(2025, 2, "IT개론"),
+            CourseHistory(2025, 2, "기호논리학개론"),
+            CourseHistory(2025,2 , "사회적이슈의 찬반논쟁"),
+            CourseHistory(2025,2 , "모바일 프로그래밍밍"),
+            #CourseHistory(2025, , ""),
+            #CourseHistory(2025, , ""),
+            #CourseHistory(2026, 1, "이산수학"),
+        ],
+        mandatory_ge=MandatoryGE(
+            bisato_semester=1, bisato_day=None, bisato_block=None,
+            changsagl_semester=2, changsagl_day=None, changsagl_block=None,
+        ),
+    )
+
+    gap = calculate_gap(student)
+    filtered = filter_courses(
+        student, 2026, 1,
+        off_days=["금"],
+        campus_pref="수캠위주",
+    )
+    
 
     timetables = recommend(
         student=student,
@@ -439,7 +489,7 @@ if __name__ == "__main__":
         filtered_df=filtered,
         target_semester=1,
         desired_credits=18,
-        desired_major_credits=9,
+        desired_major_credits=18,
         off_days=["금"],
         campus_pref="수캠위주",
         retake_priority=False,
