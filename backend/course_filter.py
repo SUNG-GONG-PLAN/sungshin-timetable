@@ -248,7 +248,7 @@ def filter_courses(
 
 
 # ── 1학년 필수배정 슬롯 추출 ──────────────────────────────────────────
-def get_mandatory_slots(student: Student) -> list[TimeSlot]:
+def get_mandatory_slots(student: Student,target_semester: int) -> list[TimeSlot]:
     """
     비사토·창사글 TimeSlot 반환 → recommender가 '확정된 자리'로 충돌 체크에 사용
     캠퍼스는 student.campus (주전공 학과 캠퍼스) 자동 적용
@@ -272,7 +272,7 @@ def get_mandatory_slots(student: Student) -> list[TimeSlot]:
 # ── 동작 테스트 ───────────────────────────────────────────────────────
 if __name__ == "__main__":
     from student import Student, MandatoryGE, CourseHistory
-
+S
     student = Student(
         name="홍길동",
         dept="AI융합학부",
