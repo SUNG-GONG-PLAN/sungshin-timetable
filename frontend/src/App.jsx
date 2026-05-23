@@ -130,29 +130,49 @@ function Stepper({ current }) {
   );
 }
 
-function InputBox({ label, value, placeholder, icon, helper }) {
+function InputBox({ label, value, placeholder, icon, helper, labelHint, onChange }) {
+  const inputProps = onChange
+    ? { value: value ?? "", onChange: (e) => onChange(e.target.value) }
+    : { defaultValue: value ?? "" };
+
   return (
     <label className="field">
       <span className="field-label">
         <Icon type={icon} />
         {label}
+        {labelHint && <em className="label-hint">{labelHint}</em>}
       </span>
-      <input value={value ?? ""} placeholder={placeholder} readOnly />
+      <input placeholder={placeholder} {...inputProps} />
       {helper && <span className="helper-text">{helper}</span>}
     </label>
   );
 }
 
-function RadioRow({ label, selected }) {
+function RadioRow({ label, selected, options, onChange }) {
+  const radioOptions = options ?? [
+    { value: "yes", label: "예" },
+    { value: "no", label: "아니오" },
+  ];
+
   return (
     <div className="radio-row">
       <span className="radio-label">{label}</span>
-      <label className="radio-option">
-        <span className={`radio-dot ${selected === "yes" ? "checked" : ""}`} />예
-      </label>
-      <label className="radio-option">
-        <span className={`radio-dot ${selected === "no" ? "checked" : ""}`} />아니오
-      </label>
+      <div className="radio-options">
+        {radioOptions.map((option) => (
+          <label className="radio-option" key={option.value}>
+            <input
+              className="radio-input"
+              type="radio"
+              name={label}
+              value={option.value}
+              checked={selected === option.value}
+              onChange={() => onChange?.(option.value)}
+            />
+            <span className={`radio-dot ${selected === option.value ? "checked" : ""}`} />
+            {option.label}
+          </label>
+        ))}
+      </div>
     </div>
   );
 }
@@ -182,23 +202,91 @@ function StartScreen({ setStep }) {
 }
 
 function BasicInfo({ setStep }) {
+  const [basicInfo, setBasicInfo] = useState({
+    name: "김수정",
+    department: "AI융합학부_AI전공",
+    studentId: "20261234",
+    grade: "2학년",
+    semester: "2026년 1학기",
+    majorType: "minor",
+    subMajorDepartment: "데이터사이언스학과",
+  });
+
+  const updateBasicInfo = (key, value) => {
+    setBasicInfo((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const majorTypeLabel = {
+    minor: "부전공",
+    double: "복수전공",
+    intensive: "전공심화",
+  }[basicInfo.majorType];
+
   return (
     <PageShell step={1} title="기본 정보를 입력해주세요" subtitle="정확한 추천을 위해 기본 정보를 입력해주세요.">
       <div className="two-column">
         <section className="card form-card">
           <div className="form-grid two">
-            <InputBox label="이름" icon="user" value="김수정" />
-            <InputBox label="학과 (직접 입력)" icon="major" value="AI융합학부_AI전공" />
+            <InputBox
+              label="이름"
+              icon="user"
+              value={basicInfo.name}
+              onChange={(value) => updateBasicInfo("name", value)}
+            />
+            <InputBox
+              label="학과 (직접 입력)"
+              icon="major"
+              value={basicInfo.department}
+              onChange={(value) => updateBasicInfo("department", value)}
+            />
           </div>
-          <InputBox label="학번" icon="id" placeholder="예) 20261234" helper="학번 8자리를 정확히 입력해주세요. (공백 없이 입력)" />
+
+          <InputBox
+            label="학번"
+            icon="id"
+            value={basicInfo.studentId}
+            placeholder="예) 20261234"
+            helper="학번 8자리를 정확히 입력해주세요. (공백 없이 입력)"
+            onChange={(value) => updateBasicInfo("studentId", value)}
+          />
+
           <div className="form-grid two">
-            <InputBox label="현재 학년" icon="grade" value="2학년" />
-            <InputBox label="현재 학기" icon="term" value="2026년 1학기" />
+            <InputBox
+              label="현재 학년"
+              icon="grade"
+              value={basicInfo.grade}
+              onChange={(value) => updateBasicInfo("grade", value)}
+            />
+            <InputBox
+              label="현재 학기"
+              icon="term"
+              value={basicInfo.semester}
+              labelHint="해당 학기의 시간표를 추천해드립니다"
+              onChange={(value) => updateBasicInfo("semester", value)}
+            />
           </div>
+
           <div className="form-grid two radio-grid">
-            <RadioRow label="복수전공 여부" selected="no" />
-            <RadioRow label="교직 이수 여부" selected="no" />
+            <RadioRow
+              label="부/복수전공 선택"
+              selected={basicInfo.majorType}
+              onChange={(value) => updateBasicInfo("majorType", value)}
+              options={[
+                { value: "minor", label: "부전공" },
+                { value: "double", label: "복수전공" },
+                { value: "intensive", label: "전공심화" },
+              ]}
+            />
+
+            <InputBox
+              label="부/복수전공 학과 입력"
+              icon="major"
+              value={basicInfo.subMajorDepartment}
+              placeholder="예) 데이터사이언스학과"
+              onChange={(value) => updateBasicInfo("subMajorDepartment", value)}
+            />
           </div>
+
           <div className="notice"><Icon type="info" />입력하신 정보는 시간표 추천 및 졸업 요건 분석에만 활용됩니다.</div>
         </section>
 
@@ -207,15 +295,15 @@ function BasicInfo({ setStep }) {
           <div className="profile-row">
             <div className="avatar"><span /></div>
             <div>
-              <strong>김수정</strong>
-              <p>20261234</p>
-              <p>AI융합학부_AI전공</p>
+              <strong>{basicInfo.name || "이름 미입력"}</strong>
+              <p>{basicInfo.studentId || "학번 미입력"}</p>
+              <p>{basicInfo.department || "학과 미입력"}</p>
             </div>
           </div>
-          <SummaryLine icon="grade" label="현재 학년" value="2학년" />
-          <SummaryLine icon="term" label="현재 학기" value="2026학년 1학기" />
-          <SummaryLine icon="double" label="복수전공 여부" value="아니오" />
-          <SummaryLine icon="book" label="교직 이수 여부" value="아니오" />
+          <SummaryLine icon="grade" label="현재 학년" value={basicInfo.grade || "미입력"} />
+          <SummaryLine icon="term" label="현재 학기" value={basicInfo.semester || "미입력"} />
+          <SummaryLine icon="double" label="부/복수전공 선택" value={majorTypeLabel} />
+          <SummaryLine icon="major" label="부/복수전공 학과" value={basicInfo.subMajorDepartment || "미입력"} />
           <div className="guide-box"><Icon type="info" />선택하신 학년과 이수 상황에 따라 다음 단계에서 필요한 입력 항목이 달라집니다.</div>
         </aside>
       </div>
@@ -264,6 +352,7 @@ function AcademicHistory({ setStep }) {
           <GuideItem>1학년은 자동배정 과목 정보를 입력합니다.</GuideItem>
           <GuideItem>1학년 2학기 이상 및 2학년 이상은 기존 수강 이력을 입력합니다.</GuideItem>
           <GuideItem>재수강 과목은 체크하여 추천에 반영할 수 있습니다.</GuideItem>
+          <GuideItem>재수강한 과목이 있을 시 재수강을 한 학기의 이력만 입력합니다.</GuideItem>
           <div className="guide-box center"><Icon type="info" />조건 기반 동적 UI로<br />필요한 입력칸만 표시됩니다.</div>
         </aside>
       </div>
@@ -277,22 +366,56 @@ function GuideItem({ children }) {
 }
 
 function Preferences({ setStep }) {
-  const [freeDay, setFreeDay] = useState("금");
+  const [freeDays, setFreeDays] = useState(["금"]);
+  const [campus, setCampus] = useState("mixed");
+
+  const toggleFreeDay = (day) => {
+    setFreeDays((prev) =>
+      prev.includes(day) ? prev.filter((item) => item !== day) : [...prev, day]
+    );
+  };
+
+  const campusLabel = {
+    su: "수캠 위주",
+    un: "운캠 위주",
+    mixed: "혼재 가능",
+  }[campus];
+
   return (
     <PageShell step={3} title="원하는 시간표 조건을 선택해주세요" subtitle="선택한 조건을 바탕으로 맞춤형 시간표를 추천합니다.">
       <div className="two-column pref-layout">
         <section className="card pref-card">
-          <h3>희망 공강 요일</h3>
+          <h3 className="section-title-with-hint">
+            희망 공강 요일
+            <em>(중복선택 가능)</em>
+          </h3>
           <div className="day-grid">
-            {days.map((day) => (
-              <button key={day} className={freeDay === day ? "selected" : ""} onClick={() => setFreeDay(day)}>
-                {day}{freeDay === day && <span className="check-badge">✓</span>}
-              </button>
-            ))}
+            {days.map((day) => {
+              const selected = freeDays.includes(day);
+              return (
+                <button key={day} className={selected ? "selected" : ""} onClick={() => toggleFreeDay(day)}>
+                  {day}{selected && <span className="check-badge">✓</span>}
+                </button>
+              );
+            })}
           </div>
           <hr />
-          <h3>희망 학점</h3>
-          <select className="full-select" value="18학점" readOnly><option>18학점</option></select>
+
+          <div className="credit-campus-grid">
+            <div>
+              <h3>희망 학점</h3>
+              <select className="full-select" defaultValue="18학점"><option>18학점</option></select>
+            </div>
+            <div>
+              <h3>희망 캠퍼스</h3>
+              <select className="full-select" value={campus} onChange={(e) => setCampus(e.target.value)}>
+                <option value="su">수캠 위주</option>
+                <option value="un">운캠 위주</option>
+                <option value="mixed">혼재 가능</option>
+              </select>
+            </div>
+          </div>
+
           <hr />
           <h3>수업 시간 선호</h3>
           <div className="check-row">
@@ -312,8 +435,9 @@ function Preferences({ setStep }) {
         </section>
         <aside className="card summary-card purple-tint">
           <h3>선택 조건 요약</h3>
-          <SummaryLine icon="calendar" label="희망 공강" value={`${freeDay}요일`} />
+          <SummaryLine icon="calendar" label="희망 공강" value={freeDays.length > 0 ? `${freeDays.join(", ")}요일` : "선택 안 함"} />
           <SummaryLine icon="major" label="희망 학점" value="18학점" />
+          <SummaryLine icon="calendar" label="희망 캠퍼스" value={campusLabel} />
           <SummaryLine icon="clock" label="시간 선호" value="오전 수업 피하기, 수업 사이 공강 확보" />
           <SummaryLine icon="balance" label="구성 선호" value="균형형" />
           <div className="guide-box"><Icon type="info" />선택한 조건은 이후 AI 분석 단계에서 시간표 추천 우선순위에 반영됩니다.</div>
@@ -583,14 +707,17 @@ button { cursor: pointer; }
 .form-grid.two { display: grid; grid-template-columns: 1fr 1.1fr; gap: 28px; }
 .field { display: block; margin-bottom: 22px; }
 .field-label { display: flex; align-items: center; gap: 10px; font-weight: 800; margin-bottom: 9px; }
+.label-hint { margin-left: auto; color: var(--primary); font-size: 13px; font-style: normal; font-weight: 800; background: #f4f0ff; border: 1px solid #dfd6ff; border-radius: 999px; padding: 5px 10px; white-space: nowrap; }
 .icon { display: inline-grid; place-items: center; min-width: 19px; height: 19px; color: var(--primary); font-weight: 800; font-size: 18px; }
 input, select { width: 100%; height: 44px; border: 1.5px solid #ccd0d8; border-radius: 5px; padding: 0 16px; background: #fff; color: #353741; font-weight: 700; outline: none; }
 input::placeholder { color: #c3c5cb; }
 .helper-text { display: block; margin-top: 7px; color: #626874; font-weight: 700; font-size: 14px; }
 .radio-grid { margin-top: 4px; }
-.radio-row { display: grid; grid-template-columns: 1fr auto auto; gap: 20px; align-items: center; margin-bottom: 20px; }
-.radio-label { grid-column: 1 / -1; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.radio-option { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; }
+.radio-row { display: block; margin-bottom: 20px; }
+.radio-label { font-weight: 800; display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.radio-options { display: flex; flex-wrap: wrap; gap: 16px 22px; }
+.radio-option { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.radio-input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
 .radio-dot { width: 20px; height: 20px; border: 2px solid #bebfc5; border-radius: 50%; display: inline-block; position: relative; }
 .radio-dot.checked { border-color: var(--primary); }
 .radio-dot.checked::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); position: absolute; inset: 3px; }
@@ -632,6 +759,9 @@ input::placeholder { color: #c3c5cb; }
 .pref-layout { grid-template-columns: minmax(0, 2fr) minmax(340px, 1fr); }
 .pref-card { padding: 28px 36px 22px; }
 .pref-card h3 { color: #252832; font-size: 18px; margin-bottom: 16px; }
+.section-title-with-hint { display: flex; align-items: center; gap: 10px; }
+.section-title-with-hint em { color: var(--primary); font-size: 14px; font-style: normal; font-weight: 800; }
+.credit-campus-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: end; }
 .pref-card hr, .graduation-card hr { border: 0; border-top: 1px solid #e1e3e8; margin: 16px 0; }
 .day-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px; }
 .day-grid button, .segment-row button { height: 60px; background: white; border: 1.5px solid #d8dce4; border-radius: 7px; font-weight: 800; font-size: 17px; position: relative; }
@@ -708,7 +838,7 @@ input::placeholder { color: #c3c5cb; }
   .app-header { padding: 0 22px; }
   .stepper { overflow-x: auto; padding-bottom: 8px; }
   .two-column, .academic-layout, .pref-layout, .detail-layout, .result-grid { grid-template-columns: 1fr; }
-  .form-grid.two, .check-row, .segment-row, .day-grid { grid-template-columns: 1fr 1fr; }
+  .form-grid.two, .check-row, .segment-row, .day-grid, .credit-campus-grid { grid-template-columns: 1fr 1fr; }
   .result-grid { max-width: 560px; margin-inline: auto; }
   .orbit-main { width: 560px; height: 560px; }
 }
