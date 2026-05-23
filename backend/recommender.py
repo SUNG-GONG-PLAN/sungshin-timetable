@@ -26,18 +26,26 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "..", "데이터")
 
 # ── 결과 자료구조 ─────────────────────────────────────────────────────
+# 수업시간 선호 상수
+TIME_PREF_NO_MORNING  = "오전수업피하기"   # 1블럭(1-3교시) 과목 감점
+TIME_PREF_NO_FULLDAY  = "풀강피하기"       # 하루 3블럭 연속 감점
+TIME_PREF_COMPACT     = "몰아듣기선호"     # 같은 날 과목 몰리면 가점
+TIME_PREF_GAP         = "수업사이공백확보"  # 블럭 사이 공백 있으면 가점
+
 @dataclass
 class Timetable:
     """시간표 하나"""
-    courses: list[dict]          # 각 과목 정보 (DataFrame 행을 dict로)
-    total_credits: float         # 총 학점
-    score: float                 # 종합 점수
-    label: str = ""              # 시간표 구분 레이블 (ex. "균형형", "전공집중형", "공강최적형")
-    reason_tags: list[str] = field(default_factory=list)  # 추천 이유 태그
+    courses: list[dict]                    # 각 과목 정보 (DataFrame 행을 dict로)
+    total_credits: float                   # 총 학점
+    score: float                           # 종합 점수
+    label: str = ""                        # 시간표 구분 레이블
+    reason_tags: list[str] = field(default_factory=list)   # 추천 이유 태그
+    ge_area_breakdown: dict = field(default_factory=dict)  # 핵심교양 영역별 학점
+    # ex) {"인식과가치": {"기존": 3, "추가": 3}, "공학과기술": {"기존": 0, "추가": 3}}
 
 
 # ── 데이터 로더 ───────────────────────────────────────────────────────
-def _load_roadmap(dept: str,sub_track:str=None) -> dict[str, str]:
+def _load_roadmap(dept: str) -> dict[str, str]:
     """
     로드맵에서 학과 시트 로드
     반환: {과목명(공백제거): 영역번호(int)}  ex) {"자료구조": 2}
@@ -157,18 +165,78 @@ def _score_course(
     return score
 
 
+def _get_time_pref_score(slots: list[TimeSlot], time_prefs: list[str]) -> float:
+    """
+    수업시간 선호 점수 (과목 단위 계산 가능한 것만 여기서 처리)
+    오전수업피하기: 1블럭 과목이면 감점 -8
+    나머지(풀강피하기/몰아듣기/공백확보)는 조합 단위라서 _score_timetable_time_pref()에서 처리
+    """
+    score = 0.0
+    if TIME_PREF_NO_MORNING in time_prefs:
+        if any(s.block == 1 for s in slots):
+            score -= 8.0
+    return score
+
+
+def _score_timetable_time_pref(
+    selected: list[dict],
+    time_prefs: list[str],
+) -> float:
+    """
+    시간표 전체 조합 단위 수업시간 선호 점수
+    풀강피하기 / 몰아듣기선호 / 수업사이공백확보
+    """
+    if not time_prefs or not selected:
+        return 0.0
+
+    # 요일별 블럭 집합 구성
+    day_blocks: dict[str, set] = {}
+    for course in selected:
+        for slot in course.get("parsed_slots", []):
+            day_blocks.setdefault(slot.day, set()).add(slot.block)
+
+    score = 0.0
+    for day, blocks in day_blocks.items():
+        n = len(blocks)
+        sorted_blocks = sorted(blocks)
+
+        # 풀강 피하기: 하루에 3블럭 모두 차면 감점
+        if TIME_PREF_NO_FULLDAY in time_prefs:
+            if blocks == {1, 2, 3}:
+                score -= 15.0
+
+        # 몰아듣기 선호: 연속 블럭이면 가점
+        if TIME_PREF_COMPACT in time_prefs:
+            consecutive = sum(
+                1 for i in range(len(sorted_blocks) - 1)
+                if sorted_blocks[i+1] - sorted_blocks[i] == 1
+            )
+            score += consecutive * 5.0
+
+        # 수업 사이 공백 확보: 연속하지 않는 블럭이 있으면 가점
+        if TIME_PREF_GAP in time_prefs:
+            gaps = sum(
+                1 for i in range(len(sorted_blocks) - 1)
+                if sorted_blocks[i+1] - sorted_blocks[i] > 1
+            )
+            score += gaps * 5.0
+
+    return score
+
+
 def _apply_soft_scores(df: pd.DataFrame) -> pd.DataFrame:
     """
     course_filter가 미리 계산해 둔 soft 점수 컬럼을 종합 점수에 반영
-    off_day_penalty: 공강 위반 → 감점
+    off_day_penalty : 공강 위반 → 감점
     campus_pref_score: 캠퍼스 선호 → 가점
+    time_pref_score : 수업시간 선호 → 가/감점
     """
     df = df.copy()
-    # 공강 위반 감점: penalty=1.0이면 W_OFFDAY 만큼 감점
     df["score"] = (
         df["base_score"]
         - df["off_day_penalty"] * W_OFFDAY
         + df["campus_pref_score"] * W_CAMPUS
+        + df.get("time_pref_score", 0)
     )
     return df
 
@@ -263,6 +331,7 @@ def recommend(
     off_days: list[str] = None,
     campus_pref: str = CAMPUS_PREF_ANY,
     retake_priority: bool = True,
+    time_prefs: list[str] = None,
 ) -> list[Timetable]:
     """
     시간표 3개 추천
@@ -278,6 +347,8 @@ def recommend(
         off_days              : 희망 공강 요일 리스트
         campus_pref           : 캠퍼스 선호
         retake_priority       : 재수강 과목 우선 추천 여부
+        time_prefs            : 수업시간 선호 리스트
+                                ex) ["오전수업피하기", "수업사이공백확보"]
 
     Returns:
         Timetable 3개 리스트
@@ -287,6 +358,8 @@ def recommend(
     """
     if off_days is None:
         off_days = []
+    if time_prefs is None:
+        time_prefs = []
 
     # 데이터 로드
     roadmap = _load_roadmap(student.dept)
@@ -300,6 +373,11 @@ def recommend(
         axis=1
     )
 
+    # ── 수업시간 선호 점수 컬럼 추가 ──────────────────────────────
+    df["time_pref_score"] = df["parsed_slots"].apply(
+        lambda slots: _get_time_pref_score(slots, time_prefs)
+    )
+
     # ── 소프트 조건 반영 → 최종 점수 ──────────────────────────────
     df = _apply_soft_scores(df)
 
@@ -308,7 +386,7 @@ def recommend(
         df, mandatory_slots,
         desired_credits, desired_major_credits, desired_double_credits
     )
-    tt1 = _make_timetable(courses1, "균형형", mandatory_slots, gap)
+    tt1 = _make_timetable(courses1, "균형형", mandatory_slots, gap, time_prefs)
 
     # ── 시간표 2: 전공집중형 (전공 학점 한도 완화) ──────────────────
     # 전공 점수 가중치 올리고, 교양 점수 낮춰서 다른 구성 유도
@@ -322,7 +400,7 @@ def recommend(
         min(desired_credits * 0.8, desired_major_credits + 3),  # 전공 한도 살짝 늘림
         desired_double_credits
     )
-    tt2 = _make_timetable(courses2, "전공집중형", mandatory_slots, gap)
+    tt2 = _make_timetable(courses2, "전공집중형", mandatory_slots, gap, time_prefs)
 
     # ── 시간표 3: 공강최적형 (off_day_penalty 최소화) ──────────────
     # 공강 위반 과목에 강한 감점을 줘서 공강을 최대한 지키는 구성
@@ -333,7 +411,7 @@ def recommend(
         df3, mandatory_slots,
         desired_credits, desired_major_credits, desired_double_credits
     )
-    tt3 = _make_timetable(courses3, "공강최적형", mandatory_slots, gap)
+    tt3 = _make_timetable(courses3, "공강최적형", mandatory_slots, gap, time_prefs)
 
     return [tt1, tt2, tt3]
 
@@ -343,29 +421,69 @@ def _make_timetable(
     label: str,
     mandatory_slots: list[TimeSlot],
     gap: GraduationGap,
+    time_prefs: list[str] = None,
 ) -> Timetable:
     """선택된 과목 리스트로 Timetable 객체 생성 + 추천 이유 태그 생성"""
+    if time_prefs is None:
+        time_prefs = []
+
     total_credits = sum(c.get("학점_num", 0) for c in courses)
-    avg_score = sum(c.get("score", 0) for c in courses) / len(courses) if courses else 0
+    # 조합 단위 time_pref 점수 반영
+    timetable_time_bonus = _score_timetable_time_pref(courses, time_prefs)
+    avg_score = (
+        sum(c.get("score", 0) for c in courses) / len(courses) + timetable_time_bonus
+        if courses else 0
+    )
 
     # 규칙 기반 추천 이유 태그
-    tags = _generate_reason_tags(courses, gap, mandatory_slots)
+    tags = _generate_reason_tags(courses, gap, mandatory_slots, time_prefs)
+
+    # 핵심교양 영역 breakdown 계산
+    ge_breakdown = _calc_ge_area_breakdown(courses, gap)
 
     return Timetable(
         courses=courses,
         total_credits=total_credits,
-        score=avg_score,
+        score=round(avg_score, 1),
         label=label,
         reason_tags=tags,
+        ge_area_breakdown=ge_breakdown,
     )
+
+
+def _calc_ge_area_breakdown(
+    courses: list[dict],
+    gap: GraduationGap,
+) -> dict:
+    """
+    핵심교양 영역별 학점 breakdown 계산
+    반환: {"인식과가치": {"기존": 3, "추가": 3}, ...}
+    프론트에서 핵심교양 클릭 시 영역별 상세 표시에 사용
+    """
+    CORE_GE_AREAS = ["인식과가치", "문학과예술", "역사의해석", "사회의이해", "자연의설명", "공학과기술"]
+    result = {}
+
+    # 기존 이수 영역 (gap에 저장된 정보)
+    for area in CORE_GE_AREAS:
+        result[area] = {"기존": 3 if area in gap.core_ge_areas_earned else 0, "추가": 0}
+
+    # 이번 시간표에서 추가되는 영역
+    for course in courses:
+        if str(course.get("이수구분", "")) == "핵심교양":
+            area = str(course.get("영역", "")).strip()
+            if area in result:
+                result[area]["추가"] += int(course.get("학점_num", 0))
+
+    # 값이 0/0인 영역은 제외 (프론트 표시 간결하게)
+    return {k: v for k, v in result.items() if v["기존"] > 0 or v["추가"] > 0}
 
 
 def _generate_reason_tags(
     courses: list[dict],
     gap: GraduationGap,
     mandatory_slots: list[TimeSlot],
+    time_prefs: list[str] = None,
 ) -> list[str]:
-
     """
     규칙 기반 추천 이유 태그 생성
     LLM 대신 템플릿 방식 사용 (비용·속도 문제)
@@ -379,7 +497,7 @@ def _generate_reason_tags(
     retake_count = sum(1 for c in courses if c.get("is_retake_target", False))
     off_penalty_count = sum(1 for c in courses if c.get("off_day_penalty", 0) > 0)
     total_credits = sum(c.get("학점_num", 0) for c in courses)
- 
+
     if major_count > 0:
         parts = []
         if core_count > 0:
@@ -406,10 +524,34 @@ def _generate_reason_tags(
         tags.append(f"공강 요일 위반 {off_penalty_count}과목 — 졸업 필수 과목 우선 반영")
     if mandatory_slots:
         tags.append(f"비사토·창사글 시간({mandatory_slots[0].day}요일) 충돌 없이 구성")
+
+    # 수업시간 선호 반영 태그
+    if time_prefs:
+        day_blocks: dict[str, list] = {}
+        for course in courses:
+            for slot in course.get("parsed_slots", []):
+                day_blocks.setdefault(slot.day, []).append(slot.block)
+
+        if TIME_PREF_NO_MORNING in time_prefs:
+            morning_count = sum(1 for c in courses if any(s.block == 1 for s in c.get("parsed_slots", [])))
+            if morning_count == 0:
+                tags.append("오전(1-3교시) 수업 없음")
+            else:
+                tags.append(f"오전 수업 {morning_count}과목 포함 (필수 과목)")
+        if TIME_PREF_NO_FULLDAY in time_prefs:
+            fullday = [d for d, bl in day_blocks.items() if set(bl) == {1,2,3}]
+            if not fullday:
+                tags.append("풀강 없음")
+            else:
+                tags.append(f"풀강 {len(fullday)}일 포함 (필수 과목)")
+        if TIME_PREF_COMPACT in time_prefs:
+            tags.append("수업 몰아듣기 반영")
+        if TIME_PREF_GAP in time_prefs:
+            tags.append("수업 사이 여유 시간 확보")
+
     tags.append(f"총 {total_credits:.0f}학점")
- 
+
     return tags
-    
 
 
 # ── 동작 테스트 ───────────────────────────────────────────────────────
@@ -417,42 +559,16 @@ if __name__ == "__main__":
     from student import Student, MandatoryGE, CourseHistory
     from gap_calculator import calculate_gap
     from course_filter import filter_courses
-    '''
+
     student = Student(
         name="홍길동",
         dept="AI융합학부",
-        student_id="20230001",
-        grade=2,
-        current_semester=1,
-        track="전공심화",
-        history=[
-            CourseHistory(2023, 1, "파이썬프로그래밍"),
-            CourseHistory(2023, 1, "자료구조"),
-            CourseHistory(2023, 2, "이산수학"),
-        ],
-        mandatory_ge=MandatoryGE(
-            bisato_semester=1, bisato_day="월", bisato_block=1,
-            changsagl_semester=2, changsagl_day="수", changsagl_block=2,
-        ),
-    )
-
-    gap = calculate_gap(student)
-    filtered = filter_courses(
-        student, 2026, 1,
-        off_days=["금"],
-        campus_pref="수캠위주",
-    )
-    '''
-    #실제 내 시간표
-    student = Student(
-        name="이세윤",
-        dept="AI",
-        student_id="20241245",
+        student_id="20240001",
         grade=3,
         current_semester=1,
         track="전공심화",
         history=[
-            CourseHistory(2024, 1, "파이썬프로그래밍"),
+             CourseHistory(2024, 1, "파이썬프로그래밍"),
             CourseHistory(2024,1,"사회공헌활동의이해와전망"),
             CourseHistory(2024,1,"소프트웨어융합기술개론"),
             CourseHistory(2024,1,"비판적사고와토론"),
@@ -474,10 +590,8 @@ if __name__ == "__main__":
             CourseHistory(2025, 2, "IT개론"),
             CourseHistory(2025, 2, "기호논리학개론"),
             CourseHistory(2025,2 , "사회적이슈의 찬반논쟁"),
-            CourseHistory(2025,2 , "모바일 프로그래밍밍"),
-            #CourseHistory(2025, , ""),
-            #CourseHistory(2025, , ""),
-            #CourseHistory(2026, 1, "이산수학"),
+            CourseHistory(2025,2 , "모바일 프로그래밍")
+            
         ],
         mandatory_ge=MandatoryGE(
             bisato_semester=1, bisato_day=None, bisato_block=None,
@@ -485,30 +599,52 @@ if __name__ == "__main__":
         ),
     )
 
+     # ── 사용자 희망 조건 ──────────────────────────────────────────────
+    TARGET_YEAR       = 2026
+    TARGET_SEMESTER   = 1
+    OFF_DAYS          = ["금"]                  # 희망 공강 요일
+    CAMPUS_PREF       = "수캠위주"               # 수캠위주 / 운캠위주 / 혼재가능
+    DESIRED_CREDITS   = 18                      # 희망 총 학점
+    DESIRED_MAJOR     = 9                       # 희망 주전공 학점
+    RETAKE_PRIORITY   = False                   # 재수강 우선 추천 여부
+    TIME_PREFS        = [                       # 수업시간 선호 (복수 선택 가능)
+        TIME_PREF_NO_MORNING,   # 오전 수업 피하기
+        # TIME_PREF_NO_FULLDAY, # 풀강 피하기
+        # TIME_PREF_COMPACT,    # 몰아듣기 선호
+        TIME_PREF_GAP,          # 수업 사이 공백 확보
+    ]
+ 
     gap = calculate_gap(student)
     filtered = filter_courses(
-        student, 2026, 1,
-        off_days=["금"],
-        campus_pref="수캠위주",
+        student,
+        target_year=TARGET_YEAR,
+        target_semester=TARGET_SEMESTER,
+        off_days=OFF_DAYS,
+        campus_pref=CAMPUS_PREF,
     )
-    
-
+ 
     timetables = recommend(
         student=student,
         gap=gap,
         filtered_df=filtered,
-        target_semester=1,
-        desired_credits=18,
-        desired_major_credits=18,
-        off_days=["금"],
-        campus_pref="수캠위주",
-        retake_priority=False,
+        target_semester=TARGET_SEMESTER,
+        desired_credits=DESIRED_CREDITS,
+        desired_major_credits=DESIRED_MAJOR,
+        off_days=OFF_DAYS,
+        campus_pref=CAMPUS_PREF,
+        retake_priority=RETAKE_PRIORITY,
+        time_prefs=TIME_PREFS,
     )
-
+ 
     for i, tt in enumerate(timetables):
         print(f"\n{'='*50}")
-        print(f"[시간표 {i+1}] {tt.label}  |  총 {tt.total_credits:.0f}학점  |  점수 {tt.score:.1f}")
+        print(f"[시간표 {i+1}] {tt.label}  |  총 {tt.total_credits:.0f}학점  |  점수 {tt.score}")
         print(f"추천 이유: {' / '.join(tt.reason_tags)}")
+        if tt.ge_area_breakdown:
+            print(f"핵심교양 영역: ", end="")
+            for area, v in tt.ge_area_breakdown.items():
+                print(f"{area}(기존{v['기존']}+추가{v['추가']})", end="  ")
+            print()
         print("-" * 50)
         for c in tt.courses:
             print(f"  {c.get('교과목명',''):<20} {c.get('이수구분',''):<8} "
