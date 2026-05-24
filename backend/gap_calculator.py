@@ -78,7 +78,7 @@ def get_course_info(course_name, year, semester, student_dept):
     """opened_course에서 과목 정보 조회"""
     sheets = load_opened_courses(year, semester)
     #내 학과의 모든 데이터상 표기
-    dept_aliases = get_dept_aliases(student_dept)
+    dept_aliases = get_dept_aliases(student_dept, student_dept)
 
     for sheet_name, df in sheets.items():
         if df is None or df.empty:
@@ -282,6 +282,7 @@ def calculate_gap(student: Student) -> GraduationGap:
 
 # 테스트
 if __name__ == "__main__":
+    '''
     student = Student(
         name="홍길동",
         dept="AI융합학부",
@@ -304,6 +305,51 @@ if __name__ == "__main__":
             changsagl_semester=2, changsagl_day="수", changsagl_block=2,
             jinjotam_done=True
         ),
+        '''
+        #실제 내 시간표
+    student = Student(
+        name="이세윤",
+        dept="AI",
+        student_id="20241245",
+        grade=3,
+        current_semester=1,
+        track="전공심화",
+        history=[
+            CourseHistory(2024, 1, "파이썬프로그래밍"),
+            CourseHistory(2024,1,"사회공헌활동의이해와전망"),
+            CourseHistory(2024,1,"소프트웨어융합기술개론"),
+            CourseHistory(2024,1,"비판적사고와토론"),
+            CourseHistory(2024,1,"AI와 서비스디자인"),
+            CourseHistory(2024,1,"디지털컨텐츠"),
+            CourseHistory(2024,2,"인공지능수학"),
+            CourseHistory(2024,2,"C++프로그래밍"),
+            CourseHistory(2024,2,"미적분과벡터해석기초"),
+            CourseHistory(2024,2,"창조적사고와글쓰기"),
+            CourseHistory(2024,2,"디지털금융의이해"),
+            CourseHistory(2025,1, "자료구조"),
+            CourseHistory(2025,1, "운영체제"),
+            CourseHistory(2025,1, "유전자과학과미래"),
+            CourseHistory(2025,1 , "기초 통계학"),
+            CourseHistory(2025, 1, "AI서비스설계"),
+            CourseHistory(2025, 1, "고급파이썬 프로그래밍"),
+            CourseHistory(2025,2 , "자연어처리"),
+            CourseHistory(2025,2 , "컴퓨터비전"),
+            CourseHistory(2025, 2, "IT개론"),
+            CourseHistory(2025, 2, "기호논리학개론"),
+            CourseHistory(2025,2 , "사회적이슈의 찬반논쟁"),
+            CourseHistory(2025,2 , "모바일 프로그래밍"),
+            CourseHistory(2026,1 , "AI융합개론"),
+            CourseHistory(2026,1, "인공지능"),
+            CourseHistory(2026, 1, "이산수학"),
+            CourseHistory(2026, 1, "알고리즘"),
+            CourseHistory(2026, 1, "심층학습"),
+            CourseHistory(2026, 1, "컴퓨터구조")
+        ],
+        mandatory_ge=MandatoryGE(
+            bisato_semester=1, bisato_day="None", bisato_block=None,
+            changsagl_semester=2, changsagl_day="None", changsagl_block=None,
+        ),
+    
         retake_courses=[]
     )
 
