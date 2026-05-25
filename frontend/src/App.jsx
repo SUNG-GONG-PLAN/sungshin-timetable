@@ -11,10 +11,7 @@ const steps = [
 ];
 
 const courses = [
-  { year: "2024", semester: "1학기", name: "파이썬프로그래밍", retake: "아니오" },
-  { year: "2024", semester: "2학기", name: "자료구조", retake: "아니오" },
-  { year: "2025", semester: "1학기", name: "이산수학", retake: "아니오" },
-  { year: "2025", semester: "2학기", name: "알고리즘", retake: "예" },
+  { year: "", semester: "", name: "", retake: "" },
 ];
 
 const days = ["월", "화", "수", "목", "금"];
@@ -222,12 +219,14 @@ function BasicInfo({ setStep, basicInfo, setBasicInfo }) {
               label="이름"
               icon="user"
               value={basicInfo.name}
+              placeholder="예) 김수정"
               onChange={(value) => updateBasicInfo("name", value)}
             />
             <InputBox
               label="학과 (직접 입력)"
               icon="major"
               value={basicInfo.department}
+              placeholder="예) AI융합학부_AI전공"
               onChange={(value) => updateBasicInfo("department", value)}
             />
           </div>
@@ -246,12 +245,14 @@ function BasicInfo({ setStep, basicInfo, setBasicInfo }) {
               label="현재 학년"
               icon="grade"
               value={basicInfo.grade}
+              placeholder="예) 2학년"
               onChange={(value) => updateBasicInfo("grade", value)}
             />
             <InputBox
               label="현재 학기"
               icon="term"
               value={basicInfo.semester}
+              placeholder="예) 2026년 1학기"
               labelHint="해당 학기의 시간표를 추천해드립니다"
               onChange={(value) => updateBasicInfo("semester", value)}
             />
@@ -400,6 +401,14 @@ function RequiredCourseCard({ title, value, onChange }) {
       <h3><span>+</span>{title}</h3>
       <div className="required-course-grid">
         <label>
+          <em>학기</em>
+          <select value={value.semester} onChange={(e) => onChange("semester", e.target.value)}>
+            <option value="">선택</option>
+            <option>1학기</option>
+            <option>2학기</option>
+          </select>
+        </label>
+        <label>
           <em>요일</em>
           <select value={value.day} onChange={(e) => onChange("day", e.target.value)}>
             <option value="">선택</option>
@@ -456,7 +465,7 @@ function CourseHistoryTable({ history, setHistory }) {
   const addCourse = () => {
     setHistory((prev) => [
       ...prev,
-      { year: "", semester: "1학기", name: "", retake: "아니오" },
+      { year: "", semester: "", name: "", retake: "" },
     ]);
   };
 
@@ -487,6 +496,7 @@ function CourseHistoryTable({ history, setHistory }) {
               value={course.semester}
               onChange={(e) => updateCourse(index, "semester", e.target.value)}
             >
+              <option value="">학기 선택</option>
               {semesterOptions.map((option) => (
                 <option key={option} value={option}>{option}</option>
               ))}
@@ -502,6 +512,7 @@ function CourseHistoryTable({ history, setHistory }) {
               value={course.retake}
               onChange={(e) => updateCourse(index, "retake", e.target.value)}
             >
+              <option value="">재수강 여부 선택</option>
               {retakeOptions.map((option) => (
                 <option key={option} value={option}>{option}</option>
               ))}
@@ -988,21 +999,21 @@ export default function App() {
   const requestStartedRef = useRef(false);
 
   const [basicInfo, setBasicInfo] = useState({
-    name: "김수정",
-    department: "AI융합학부_AI전공",
-    studentId: "20261234",
-    grade: "2학년",
-    semester: "2026년 1학기",
+    name: "",
+    department: "",
+    studentId: "",
+    grade: "",
+    semester: "",
     majorType: "minor",
-    subMajorDepartment: "데이터사이언스학과",
+    subMajorDepartment: "",
   });
 
   const [history, setHistory] = useState(courses);
 
   const [mandatoryGe, setMandatoryGe] = useState({
-    bisato: { course_name: "비판적 사고와 토론", day: "", start_time: "9:00", end_time: "11:00" },
-    creative_writing: { course_name: "창조적 사고와 쓰기", day: "", start_time: "9:00", end_time: "11:00" },
-    career_exploration: { course_name: "전공별 진로탐색", day: "", start_time: "9:00", end_time: "11:00" },
+    bisato: { course_name: "비판적 사고와 토론", semester: "", day: "", start_time: "9:00", end_time: "11:00" },
+    creative_writing: { course_name: "창조적 사고와 쓰기", semester: "", day: "", start_time: "9:00", end_time: "11:00" },
+    career_exploration: { course_name: "전공별 진로탐색", semester: "", day: "", start_time: "9:00", end_time: "11:00" },
   });
 
   const [preferences, setPreferences] = useState({
@@ -1014,12 +1025,14 @@ export default function App() {
     composition: "balanced",
   });
 
-  const normalizedHistory = history.map((course) => ({
-    year: course.year,
-    semester: course.semester,
-    course_name: course.name,
-    is_retake: course.retake === "예",
-  }));
+  const normalizedHistory = history
+    .filter((course) => course.year || course.semester || course.name || course.retake)
+    .map((course) => ({
+      year: course.year,
+      semester: course.semester,
+      course_name: course.name,
+      is_retake: course.retake === "예",
+    }));
 
   const appendApiLog = (message, data) => {
     const time = new Date().toLocaleTimeString();
@@ -1202,7 +1215,7 @@ input::placeholder { color: #c3c5cb; }
 .required-course-card { background: #fff; border: 1.5px solid #e1dcf3; border-radius: 12px; padding: 20px 22px 24px; color: var(--text); box-shadow: 0 8px 20px rgba(89, 46, 234, 0.04); }
 .required-course-card h3 { margin: 0 0 20px; display: flex; align-items: center; gap: 10px; font-size: 20px; color: #252832; }
 .required-course-card h3 span { width: 30px; height: 30px; border-radius: 50%; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 26px; line-height: 1; box-shadow: 0 8px 18px rgba(89,46,234,.16); }
-.required-course-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 34px; }
+.required-course-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
 .required-course-grid label { display: grid; gap: 9px; }
 .required-course-grid em { color: #6c7280; font-style: normal; font-size: 13px; font-weight: 800; }
 .required-course-grid select { height: 42px; border-color: #ccd0d8; background: #fff; color: #353741; border-radius: 5px; font-weight: 700; }
