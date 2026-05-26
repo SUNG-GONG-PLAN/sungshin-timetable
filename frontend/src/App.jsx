@@ -40,6 +40,47 @@ const scheduleToBlocks = (schedule, courseName, isStrong) => {
 
 const isStrongCategory = (cat) => ["핵심전공", "심화전공"].includes(cat);
 
+// ── 필수배정 과목 계산 유틸 (Result/Detail 공통) ────────────────────────
+function buildMandatoryCourses(basicInfo, mandatoryGe, targetSem) {
+  const grade = gradeStrToInt(basicInfo.grade);
+  const admissionYear = parseInt(basicInfo.studentId?.substring(0, 4)) || 2024;
+  const mgeCredit = admissionYear >= 2026 ? 2 : 3;
+  const result = [];
+
+  if (grade !== 1) return result;
+
+  const addMge = (info, name) => {
+    if (info?.day && info?.startTime && info?.semester === targetSem) {
+      const block = startTimeToBlock(info.startTime);
+      const blockStr = block === 1 ? "1-3" : block === 2 ? "4-6" : "7-9";
+      result.push({
+        course_name: name,
+        category: "공통교양",
+        credits: mgeCredit,
+        schedule: `${info.day}/${blockStr}`,
+        campus: "",
+        is_retake: false,
+      });
+    }
+  };
+
+  addMge(mandatoryGe.bisato, "비판적사고와토론");
+  addMge(mandatoryGe.changsagl, "창조적사고와글쓰기");
+
+  if (targetSem === 1 && !mandatoryGe.jinjotamDone) {
+    result.push({
+      course_name: "전공별진로탐색",
+      category: "진로소양",
+      credits: 1,
+      schedule: "",
+      campus: "",
+      is_retake: false,
+    });
+  }
+
+  return result;
+}
+
 // ── 공통 컴포넌트 ──────────────────────────────────────────────────────
 function Logo() {
   return (
@@ -168,7 +209,7 @@ function PageShell({ step, title, subtitle, children, center, centerTitle }) {
   );
 }
 
-// ── 1단계: 기본 정보 ───────────────────────────────────────────────────
+// ── 0단계: 시작 화면 ───────────────────────────────────────────────────
 function StartScreen({ setStep }) {
   return (
     <main className="start-screen">
@@ -182,9 +223,9 @@ function StartScreen({ setStep }) {
   );
 }
 
+// ── 1단계: 기본 정보 ───────────────────────────────────────────────────
 function BasicInfo({ basicInfo, setBasicInfo, setStep }) {
   const update = (key, val) => setBasicInfo((prev) => ({ ...prev, [key]: val }));
-
   const majorTypeLabel = { minor: "부전공", double: "복수전공", intensive: "전공심화" }[basicInfo.majorType];
 
   return (
@@ -243,15 +284,12 @@ function AcademicHistory({ courseHistory, setCourseHistory, mandatoryGe, setMand
   const addCourse = () => {
     setCourseHistory((prev) => [...prev, { year: "2025", semester: "1학기", name: "", retake: "아니오" }]);
   };
-
   const removeCourse = (idx) => {
     setCourseHistory((prev) => prev.filter((_, i) => i !== idx));
   };
-
   const updateCourse = (idx, key, val) => {
     setCourseHistory((prev) => prev.map((c, i) => i === idx ? { ...c, [key]: val } : c));
   };
-
   const updateMge = (course, key, val) => {
     setMandatoryGe((prev) => ({ ...prev, [course]: { ...prev[course], [key]: val } }));
   };
@@ -310,6 +348,7 @@ function AcademicHistory({ courseHistory, setCourseHistory, mandatoryGe, setMand
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                     <label className="field" style={{ margin: 0 }}>
                       <span className="field-label" style={{ fontSize: 13 }}>학기</span>
+                      {/* ── null 방지: parseInt로 항상 정수 반환 ── */}
                       <select value={mandatoryGe[key]?.semester ?? 1}
                         onChange={(e) => updateMge(key, "semester", parseInt(e.target.value))}>
                         <option value={1}>1학기</option><option value={2}>2학기</option>
@@ -386,14 +425,12 @@ function Preferences({ prefs, setPrefs, setStep }) {
   };
 
   const campusLabel = { su: "수캠 위주", un: "운캠 위주", mixed: "혼재 가능" }[prefs.campus];
-
   const timePrefLabels = prefs.timePrefs.map((p) => ({
     "오전수업피하기": "오전 수업 피하기",
     "풀강피하기": "풀강 피하기",
     "몰아듣기선호": "몰아듣기 선호",
     "수업사이공백확보": "수업 사이 공강 확보",
   }[p] ?? p)).join(", ");
-
   const compositionLabel = { major: "전공 위주", ge: "교양 위주", balanced: "균형형" }[prefs.composition];
 
   return (
@@ -470,20 +507,17 @@ function Preferences({ prefs, setPrefs, setStep }) {
 
 // ── 4단계: AI 분석 ─────────────────────────────────────────────────────
 function Analysis({ basicInfo, courseHistory, mandatoryGe, prefs, setApiResult, setStep }) {
-  const [status, setStatus] = useState("loading"); // loading | done | error
+  const [status, setStatus] = useState("loading");
   const [errorMsg, setErrorMsg] = useState("");
-  const [progress, setProgress] = useState(0); // 0~3
+  const [progress, setProgress] = useState(0);
 
-  useEffect(() => {
-    callApi();
-  }, []);
+  useEffect(() => { callApi(); }, []);
 
   const callApi = async () => {
     setProgress(1);
     const grade = gradeStrToInt(basicInfo.grade);
     const isFirstYear = grade === 1;
 
-    // ── 수강이력 변환 ──────────────────────────────────────────────
     const history = courseHistory
       .filter((c) => c.name.trim())
       .map((c) => ({
@@ -493,8 +527,7 @@ function Analysis({ basicInfo, courseHistory, mandatoryGe, prefs, setApiResult, 
         is_retake: c.retake === "예",
       }));
 
-    // ── mandatory_ge 변환 ──────────────────────────────────────────
-    let mandatory_ge = { jinjotam_done: mandatoryGe.jinjotamDone };
+    let mandatory_ge;
     if (isFirstYear) {
       mandatory_ge = {
         bisato_semester: mandatoryGe.bisato?.semester ?? null,
@@ -506,7 +539,6 @@ function Analysis({ basicInfo, courseHistory, mandatoryGe, prefs, setApiResult, 
         jinjotam_done: mandatoryGe.jinjotamDone,
       };
     } else {
-      // 2학년 이상: 비사토/창사글 semester만 (history에서 자동 파악)
       mandatory_ge = {
         bisato_semester: null, bisato_day: null, bisato_block: null,
         changsagl_semester: null, changsagl_day: null, changsagl_block: null,
@@ -516,7 +548,6 @@ function Analysis({ basicInfo, courseHistory, mandatoryGe, prefs, setApiResult, 
 
     setProgress(2);
 
-    // ── 전공학점 계산 ──────────────────────────────────────────────
     const credits = parseInt(prefs.credits) || 18;
     const desiredMajor = prefs.composition === "major" ? Math.round(credits * 0.7)
       : prefs.composition === "ge" ? Math.round(credits * 0.3)
@@ -621,24 +652,10 @@ function Result({ apiResult, setSelectedTimetable, setStep, basicInfo = {}, mand
   const timetables = apiResult?.timetables ?? [];
   const bestIdx = timetables.reduce((bi, tt, i) => tt.score > (timetables[bi]?.score ?? 0) ? i : bi, 0);
 
-  // 추천결과 MiniTable에도 비사토·창사글 표시
-  const grade = gradeStrToInt(basicInfo.grade);
+  // ── 필수배정 과목 (비사토·창사글·전진탐) ─────────────────────────────
   const targetSem = semesterStrToInt(basicInfo.semester?.split(" ")[1] ?? "1학기");
-  const mandatoryCoursesForMini = [];
-  if (grade === 1) {
-    const addMge = (info, name) => {
-      if (info?.day && info?.startTime && info?.semester === targetSem) {
-        const block = startTimeToBlock(info.startTime);
-        const blockStr = block === 1 ? "1-3" : block === 2 ? "4-6" : "7-9";
-        mandatoryCoursesForMini.push({
-          course_name: name, category: "공통교양", credits: 0,
-          schedule: `${info.day}/${blockStr}`, campus: "", is_retake: false,
-        });
-      }
-    };
-    addMge(mandatoryGe.bisato, "비판적사고와토론");
-    addMge(mandatoryGe.changsagl, "창조적사고와글쓰기");
-  }
+  const mandatoryCourses = buildMandatoryCourses(basicInfo, mandatoryGe, targetSem);
+  const mandatoryCredits = mandatoryCourses.reduce((s, c) => s + (c.credits ?? 0), 0);
 
   const handleSelect = (idx) => {
     setSelectedTimetable(idx);
@@ -659,11 +676,12 @@ function Result({ apiResult, setSelectedTimetable, setStep, basicInfo = {}, mand
               <span className={tagClass(tt.label)}>{tt.label}</span>
             </div>
             <div className="score-row">
-              <span><Icon type="cap" />총 {tt.total_credits + mandatoryCourses.reduce((s,c) => s + (c.credits ?? 0), 0)}학점</span>
+              {/* 필수배정 학점 포함한 실제 총 학점 표시 */}
+              <span><Icon type="cap" />총 {tt.total_credits + mandatoryCredits}학점</span>
               <span><Icon type="stack" />점수</span>
               <span><Icon type="star" />{tt.score}</span>
             </div>
-            <MiniTable courses={[...mandatoryCoursesForMini, ...(tt.courses ?? [])]} />
+            <MiniTable courses={[...mandatoryCourses, ...(tt.courses ?? [])]} />
             <div className="reason-box">
               <h4>추천 이유</h4>
               <p>{tt.reason_tags?.join(" / ")}</p>
@@ -753,63 +771,31 @@ function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, b
 
   if (!tt) return <div style={{ padding: 40, textAlign: "center" }}>시간표 데이터가 없습니다.</div>;
 
-  // 비사토·창사글을 시간표 그리드에 표시하기 위해 courses에 추가
-  const grade = gradeStrToInt(basicInfo.grade);
+  // ── 필수배정 과목 (비사토·창사글·전진탐) ─────────────────────────────
   const targetSem = semesterStrToInt(basicInfo.semester?.split(" ")[1] ?? "1학기");
-  const mandatoryCourses = [];
-  if (grade === 1) {
-    const admissionYear = parseInt(basicInfo.studentId?.substring(0, 4)) || 2024;
-    const mgeCredit = admissionYear >= 2026 ? 2 : 3;
-    const addMge = (info, name) => {
-      if (info?.day && info?.startTime && info?.semester === targetSem) {
-        const block = startTimeToBlock(info.startTime);
-        const blockStr = block === 1 ? "1-3" : block === 2 ? "4-6" : "7-9";
-        mandatoryCourses.push({
-          course_name: name,
-          category: "공통교양",
-          credits: mgeCredit,
-          schedule: `${info.day}/${blockStr}`,
-          campus: "",
-          is_retake: false,
-        });
-      }
-    };
-    addMge(mandatoryGe.bisato, "비판적사고와토론");
-    addMge(mandatoryGe.changsagl, "창조적사고와글쓰기");
-    if (targetSem === 1 && mandatoryGe.jinjotamDone === false) {
-      mandatoryCourses.push({
-        course_name: "전공별진로탐색",
-        category: "진로소양",
-        credits: 1,
-        schedule: "",
-        campus: "",
-        is_retake: false,
-      });
-    }
-  }
+  const mandatoryCourses = buildMandatoryCourses(basicInfo, mandatoryGe, targetSem);
+  const mandatoryCredits = mandatoryCourses.reduce((s, c) => s + (c.credits ?? 0), 0);
   const allCourses = [...mandatoryCourses, ...(tt.courses ?? [])];
 
-  // 핵심교양 영역 breakdown (기존 이수 현황용)
+  // 핵심교양 영역 breakdown
   const geBreakdown = tt.ge_area_breakdown ?? {};
   const geCurrentItems = Object.entries(geBreakdown)
     .filter(([, v]) => v.기존 > 0)
     .map(([area, v]) => ({ area, credit: v.기존 }));
-
-  // 핵심교양 영역 breakdown (이번 시간표 반영 예상용)
   const geAfterItems = Object.entries(geBreakdown)
     .filter(([, v]) => (v.기존 + v.추가) > 0)
     .map(([area, v]) => ({ area, credit: v.기존 + v.추가 }));
 
-  // 이번 시간표 수강 후 예상 학점 계산
+  // 이번 시간표 수강 후 예상 학점 계산 (allCourses 기준 — 필수배정 포함)
   const extraCredits = (category) =>
     allCourses.filter((c) => c.category === category).reduce((s, c) => s + (c.credits ?? 0), 0);
 
-  const gCom = gap.common_ge ?? { earned: 0, required: 15 };
-  const gCore = gap.core_ge ?? { earned: 0, required: 15 };
-  const gCareer = gap.career_ge ?? { earned: 0, required: 3 };
-  const gMajor = gap.core_major ?? { earned: 0, required: 27 };
-  const gAdv = gap.advanced_major ?? { earned: 0, required: 21 };
-  const gTotal = gap.total ?? { earned: 0, required: 130 };
+  const gCom   = gap.common_ge      ?? { earned: 0, required: 15 };
+  const gCore  = gap.core_ge        ?? { earned: 0, required: 15 };
+  const gCareer= gap.career_ge      ?? { earned: 0, required: 3 };
+  const gMajor = gap.core_major     ?? { earned: 0, required: 27 };
+  const gAdv   = gap.advanced_major ?? { earned: 0, required: 21 };
+  const gTotal = gap.total          ?? { earned: 0, required: 130 };
 
   const handleNext = () => {
     const next = (selectedTimetable + 1) % timetables.length;
@@ -824,7 +810,8 @@ function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, b
           <div className="detail-head">
             <h3>선택 시간표 {selectedTimetable + 1} <span>{tt.label}</span></h3>
             <div className="detail-score">
-              <span><Icon type="cap" />총 {tt.total_credits + mandatoryCourses.reduce((s,c) => s + (c.credits ?? 0), 0)}학점</span>
+              {/* 필수배정 학점 포함한 실제 총 학점 */}
+              <span><Icon type="cap" />총 {tt.total_credits + mandatoryCredits}학점</span>
               <span><Icon type="stack" />점수 <strong>{tt.score}</strong></span>
             </div>
           </div>
@@ -832,26 +819,23 @@ function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, b
         </section>
         <aside className="card graduation-card">
           <h3>졸업 이수 현황</h3>
-          <GradLine icon="book" label="공통교양" value={`${gCom.earned} / ${gCom.required}`} />
-          <GradLine icon="cap" label="핵심교양" value={`${gCore.earned} / ${gCore.required}`} subItems={geCurrentItems} />
+          <GradLine icon="book"  label="공통교양" value={`${gCom.earned} / ${gCom.required}`} />
+          <GradLine icon="cap"   label="핵심교양" value={`${gCore.earned} / ${gCore.required}`} subItems={geCurrentItems} />
           <GradLine icon="clock" label="진로소양" value={`${gCareer.earned} / ${gCareer.required}`} />
-          <GradLine icon="star" label="핵심전공" value={`${gMajor.earned} / ${gMajor.required}`} />
+          <GradLine icon="star"  label="핵심전공" value={`${gMajor.earned} / ${gMajor.required}`} />
           <GradLine icon="stack" label="심화전공" value={`${gAdv.earned} / ${gAdv.required}`} />
-          <GradLine icon="clock" label="총 이수" value={`${gTotal.earned} / ${gTotal.required}`} highlight />
+          <GradLine icon="clock" label="총 이수"  value={`${gTotal.earned} / ${gTotal.required}`} highlight />
           <hr />
           <h4>이 시간표 수강 시 반영 예상</h4>
-          <Progress label="공통교양"
-            earned={gCom.earned + extraCredits("공통교양")} required={gCom.required} />
-          <Progress label="핵심교양"
-            earned={gCore.earned + extraCredits("핵심교양")} required={gCore.required} subItems={geAfterItems} />
-          <Progress label="진로소양"
-            earned={gCareer.earned + extraCredits("진로소양")} required={gCareer.required} />
-          <Progress label="핵심전공"
-            earned={gMajor.earned + extraCredits("핵심전공")} required={gMajor.required} />
-          <Progress label="심화전공"
-            earned={gAdv.earned + extraCredits("심화전공")} required={gAdv.required} />
+          <Progress label="공통교양" earned={gCom.earned    + extraCredits("공통교양")} required={gCom.required} />
+          <Progress label="핵심교양" earned={gCore.earned   + extraCredits("핵심교양")} required={gCore.required} subItems={geAfterItems} />
+          <Progress label="진로소양" earned={gCareer.earned + extraCredits("진로소양")} required={gCareer.required} />
+          <Progress label="핵심전공" earned={gMajor.earned  + extraCredits("핵심전공")} required={gMajor.required} />
+          <Progress label="심화전공" earned={gAdv.earned    + extraCredits("심화전공")} required={gAdv.required} />
+          {/* 총 이수: 백엔드 tt.total_credits + 필수배정 mandatoryCredits */}
           <Progress label="총 이수"
-            earned={gTotal.earned + tt.total_credits} required={gTotal.required} strong />
+            earned={gTotal.earned + tt.total_credits + mandatoryCredits}
+            required={gTotal.required} strong />
           <div className="notice"><Icon type="info" />위 진행률은 현재 선택하신 시간표를 기준으로 예상되는 졸업 이수 기준입니다.</div>
         </aside>
       </div>
@@ -873,8 +857,9 @@ export default function App() {
     { year: "2024", semester: "1학기", name: "", retake: "아니오" },
   ]);
 
+  // ── bisato/changsagl 초기 학기 기본값 1 (null 방지) ──────────────────
   const [mandatoryGe, setMandatoryGe] = useState({
-    bisato: { semester: 1, day: "월", startTime: "9:00" },
+    bisato:    { semester: 1, day: "월", startTime: "9:00" },
     changsagl: { semester: 1, day: "월", startTime: "9:00" },
     jinjotamDone: false,
   });
@@ -1086,7 +1071,7 @@ input::placeholder { color: #c3c5cb; }
 .detail-score { display: flex; gap: 18px; }
 .detail-score span { height: 44px; border: 1.5px solid #e0e2e9; border-radius: 7px; display: flex; align-items: center; gap: 8px; padding: 0 18px; font-weight: 900; color: #555b67; }
 .detail-score strong { color: var(--primary); font-size: 20px; }
-.full-schedule { display: grid; grid-template-columns: 70px repeat(5, 1fr); grid-template-rows: 58px repeat(5, 78px); border: 1px solid #e1e4eb; border-radius: 8px; overflow: hidden; }
+.full-schedule { display: grid; grid-template-columns: 70px repeat(5, 1fr); grid-template-rows: 58px repeat(3, 78px); border: 1px solid #e1e4eb; border-radius: 8px; overflow: hidden; }
 .corner, .day-title, .time-title, .schedule-cell { border-right: 1px solid #e8eaf0; border-bottom: 1px solid #e8eaf0; display: grid; place-items: center; }
 .day-title, .time-title { font-weight: 900; color: #464c57; }
 .schedule-cell span { width: 90%; min-height: 50px; border-radius: 6px; display: grid; place-items: center; text-align: center; white-space: pre-line; font-weight: 900; line-height: 1.2; padding: 4px; }
