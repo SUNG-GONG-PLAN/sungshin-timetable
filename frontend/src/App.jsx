@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+
+const BACKEND_URL = "http://127.0.0.1:5000";
 
 const steps = [
   "기본 정보 입력",
@@ -9,57 +11,36 @@ const steps = [
   "시간표 상세",
 ];
 
-const courses = [
-  { year: "2024", semester: "1학기", name: "파이썬프로그래밍", retake: "아니오" },
-  { year: "2024", semester: "2학기", name: "자료구조", retake: "아니오" },
-  { year: "2025", semester: "1학기", name: "이산수학", retake: "아니오" },
-  { year: "2025", semester: "2학기", name: "알고리즘", retake: "예" },
-];
-
 const days = ["월", "화", "수", "목", "금"];
-const times = ["1교시", "2교시", "3교시", "4교시", "5교시"];
+const times = ["1-3교시", "4-6교시", "7-9교시"];
 
-const scheduleBlocks = [
-  { day: 2, time: 0, title: "이산수학", strong: true },
-  { day: 4, time: 0, title: "파이썬프로그래밍", strong: true },
-  { day: 1, time: 1, title: "파이썬프로그래밍", strong: true },
-  { day: 3, time: 1, title: "자료구조", strong: true },
-  { day: 0, time: 2, title: "디지털\n신호처리", strong: false },
-  { day: 2, time: 2, title: "자료구조", strong: true },
-  { day: 3, time: 2, title: "알고리즘", strong: true },
-  { day: 4, time: 2, title: "클라우드컴퓨팅AI", strong: false },
-  { day: 3, time: 3, title: "클라우드컴퓨팅AI", strong: false },
-  { day: 1, time: 4, title: "알고리즘", strong: true },
-];
+// ── 유틸 함수 ──────────────────────────────────────────────────────────
+const semesterStrToInt = (s) => (s === "2학기" ? 2 : 1);
+const gradeStrToInt = (s) => parseInt(s?.replace("학년", "")) || 1;
+const startTimeToBlock = (t) => {
+  if (!t) return null;
+  const h = parseInt(t.split(":")[0]);
+  if (h < 12) return 1;
+  if (h < 15) return 2;
+  return 3;
+};
 
-const recommendationCards = [
-  {
-    id: 1,
-    title: "시간표 1",
-    tag: "균형형",
-    credit: "총 18학점",
-    score: "84.2",
-    reason: "핵심전공과 심화전공을 균형 있게 포함해 졸업 필수 학점 충족에 도움이 됩니다.",
-  },
-  {
-    id: 2,
-    title: "시간표 2",
-    tag: "전공집중형",
-    credit: "총 17학점",
-    score: "85.7",
-    reason: "전공 과목 비중을 높여 학업 집중도를 높인 시간표입니다.",
-    best: true,
-  },
-  {
-    id: 3,
-    title: "시간표 3",
-    tag: "공강최적형",
-    credit: "총 18학점",
-    score: "84.4",
-    reason: "희망 공강 요일을 반영하면서 필수 전공 과목을 포함했습니다.",
-  },
-];
+// ── 스케줄 파싱 ────────────────────────────────────────────────────────
+const DAY_MAP = { 월: 0, 화: 1, 수: 2, 목: 3, 금: 4 };
+const BLOCK_ROW = { "1-3": 0, "4-6": 1, "7-9": 2 };
 
+const scheduleToBlocks = (schedule, courseName, isStrong) => {
+  if (!schedule) return [];
+  return schedule.split(",").flatMap((slot) => {
+    const [day, block] = slot.trim().split("/");
+    if (DAY_MAP[day] === undefined || BLOCK_ROW[block] === undefined) return [];
+    return [{ day: DAY_MAP[day], time: BLOCK_ROW[block], title: courseName, strong: isStrong }];
+  });
+};
+
+const isStrongCategory = (cat) => ["핵심전공", "심화전공"].includes(cat);
+
+// ── 공통 컴포넌트 ──────────────────────────────────────────────────────
 function Logo() {
   return (
     <div className="logo-wrap">
@@ -76,21 +57,9 @@ function Logo() {
 
 function Icon({ type }) {
   const iconMap = {
-    user: "♙",
-    major: "◇",
-    id: "▣",
-    grade: "▯",
-    term: "□",
-    double: "♧",
-    book: "▤",
-    calendar: "▣",
-    clock: "◷",
-    balance: "⚖",
-    info: "i",
-    trash: "⌫",
-    star: "☆",
-    stack: "▱",
-    cap: "▱",
+    user: "♙", major: "◇", id: "▣", grade: "▯", term: "□",
+    double: "♧", book: "▤", calendar: "▣", clock: "◷", balance: "⚖",
+    info: "i", trash: "⌫", star: "☆", stack: "▱", cap: "▱",
   };
   return <span className={`icon icon-${type}`}>{iconMap[type] ?? "•"}</span>;
 }
@@ -101,8 +70,7 @@ function Header({ step, setStep }) {
       <Logo />
       {step > 0 && (
         <button className="back-button" onClick={() => setStep(Math.max(0, step - 1))}>
-          <span>‹</span>
-          이전 단계로
+          <span>‹</span>이전 단계로
         </button>
       )}
     </header>
@@ -134,12 +102,10 @@ function InputBox({ label, value, placeholder, icon, helper, labelHint, onChange
   const inputProps = onChange
     ? { value: value ?? "", onChange: (e) => onChange(e.target.value) }
     : { defaultValue: value ?? "" };
-
   return (
     <label className="field">
       <span className="field-label">
-        <Icon type={icon} />
-        {label}
+        <Icon type={icon} />{label}
         {labelHint && <em className="label-hint">{labelHint}</em>}
       </span>
       <input placeholder={placeholder} {...inputProps} />
@@ -149,27 +115,16 @@ function InputBox({ label, value, placeholder, icon, helper, labelHint, onChange
 }
 
 function RadioRow({ label, selected, options, onChange }) {
-  const radioOptions = options ?? [
-    { value: "yes", label: "예" },
-    { value: "no", label: "아니오" },
-  ];
-
   return (
     <div className="radio-row">
       <span className="radio-label">{label}</span>
       <div className="radio-options">
-        {radioOptions.map((option) => (
-          <label className="radio-option" key={option.value}>
-            <input
-              className="radio-input"
-              type="radio"
-              name={label}
-              value={option.value}
-              checked={selected === option.value}
-              onChange={() => onChange?.(option.value)}
-            />
-            <span className={`radio-dot ${selected === option.value ? "checked" : ""}`} />
-            {option.label}
+        {options.map((opt) => (
+          <label className="radio-option" key={opt.value}>
+            <input className="radio-input" type="radio" name={label} value={opt.value}
+              checked={selected === opt.value} onChange={() => onChange?.(opt.value)} />
+            <span className={`radio-dot ${selected === opt.value ? "checked" : ""}`} />
+            {opt.label}
           </label>
         ))}
       </div>
@@ -186,6 +141,34 @@ function PrimaryButton({ children, onClick, wide = false }) {
   );
 }
 
+function SummaryLine({ icon, label, value }) {
+  return (
+    <div className="summary-line">
+      <span><Icon type={icon} />{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function GuideItem({ children }) {
+  return <p className="guide-item"><span />{children}</p>;
+}
+
+function PageShell({ step, title, subtitle, children, center, centerTitle }) {
+  return (
+    <main className={`page-shell ${center ? "center" : ""}`}>
+      <Stepper current={step} />
+      {title && (
+        <div className={`page-title ${centerTitle ? "center-title" : ""}`}>
+          <h1>{title}</h1>{subtitle && <p>{subtitle}</p>}
+        </div>
+      )}
+      {children}
+    </main>
+  );
+}
+
+// ── 1단계: 기본 정보 ───────────────────────────────────────────────────
 function StartScreen({ setStep }) {
   return (
     <main className="start-screen">
@@ -193,103 +176,42 @@ function StartScreen({ setStep }) {
       <div className="start-content">
         <p className="start-subtitle">성신여대 공대생의 시간표</p>
         <h1>성공표</h1>
-        <button className="start-button" onClick={() => setStep(1)}>
-          Start <span>▶</span>
-        </button>
+        <button className="start-button" onClick={() => setStep(1)}>Start <span>▶</span></button>
       </div>
     </main>
   );
 }
 
-function BasicInfo({ setStep }) {
-  const [basicInfo, setBasicInfo] = useState({
-    name: "김수정",
-    department: "AI융합학부_AI전공",
-    studentId: "20261234",
-    grade: "2학년",
-    semester: "2026년 1학기",
-    majorType: "minor",
-    subMajorDepartment: "데이터사이언스학과",
-  });
+function BasicInfo({ basicInfo, setBasicInfo, setStep }) {
+  const update = (key, val) => setBasicInfo((prev) => ({ ...prev, [key]: val }));
 
-  const updateBasicInfo = (key, value) => {
-    setBasicInfo((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const majorTypeLabel = {
-    minor: "부전공",
-    double: "복수전공",
-    intensive: "전공심화",
-  }[basicInfo.majorType];
+  const majorTypeLabel = { minor: "부전공", double: "복수전공", intensive: "전공심화" }[basicInfo.majorType];
 
   return (
     <PageShell step={1} title="기본 정보를 입력해주세요" subtitle="정확한 추천을 위해 기본 정보를 입력해주세요.">
       <div className="two-column">
         <section className="card form-card">
           <div className="form-grid two">
-            <InputBox
-              label="이름"
-              icon="user"
-              value={basicInfo.name}
-              onChange={(value) => updateBasicInfo("name", value)}
-            />
-            <InputBox
-              label="학과 (직접 입력)"
-              icon="major"
-              value={basicInfo.department}
-              onChange={(value) => updateBasicInfo("department", value)}
-            />
+            <InputBox label="이름" icon="user" value={basicInfo.name} onChange={(v) => update("name", v)} />
+            <InputBox label="학과 (직접 입력)" icon="major" value={basicInfo.department} onChange={(v) => update("department", v)} />
           </div>
-
-          <InputBox
-            label="학번"
-            icon="id"
-            value={basicInfo.studentId}
-            placeholder="예) 20261234"
-            helper="학번 8자리를 정확히 입력해주세요. (공백 없이 입력)"
-            onChange={(value) => updateBasicInfo("studentId", value)}
-          />
-
+          <InputBox label="학번" icon="id" value={basicInfo.studentId}
+            placeholder="예) 20261234" helper="학번 8자리를 정확히 입력해주세요. (공백 없이 입력)"
+            onChange={(v) => update("studentId", v)} />
           <div className="form-grid two">
-            <InputBox
-              label="현재 학년"
-              icon="grade"
-              value={basicInfo.grade}
-              onChange={(value) => updateBasicInfo("grade", value)}
-            />
-            <InputBox
-              label="현재 학기"
-              icon="term"
-              value={basicInfo.semester}
-              labelHint="해당 학기의 시간표를 추천해드립니다"
-              onChange={(value) => updateBasicInfo("semester", value)}
-            />
+            <InputBox label="현재 학년" icon="grade" value={basicInfo.grade} onChange={(v) => update("grade", v)} />
+            <InputBox label="현재 학기" icon="term" value={basicInfo.semester}
+              labelHint="해당 학기의 시간표를 추천해드립니다" onChange={(v) => update("semester", v)} />
           </div>
-
           <div className="form-grid two radio-grid">
-            <RadioRow
-              label="부/복수전공 선택"
-              selected={basicInfo.majorType}
-              onChange={(value) => updateBasicInfo("majorType", value)}
-              options={[
-                { value: "minor", label: "부전공" },
-                { value: "double", label: "복수전공" },
-                { value: "intensive", label: "전공심화" },
-              ]}
-            />
-
-            <InputBox
-              label="부/복수전공 학과 입력"
-              icon="major"
-              value={basicInfo.subMajorDepartment}
-              placeholder="예) 데이터사이언스학과"
-              onChange={(value) => updateBasicInfo("subMajorDepartment", value)}
-            />
+            <RadioRow label="부/복수전공 선택" selected={basicInfo.majorType}
+              onChange={(v) => update("majorType", v)}
+              options={[{ value: "minor", label: "부전공" }, { value: "double", label: "복수전공" }, { value: "intensive", label: "전공심화" }]} />
+            <InputBox label="부/복수전공 학과 입력" icon="major" value={basicInfo.subMajorDepartment}
+              placeholder="예) 데이터사이언스학과" onChange={(v) => update("subMajorDepartment", v)} />
           </div>
-
           <div className="notice"><Icon type="info" />입력하신 정보는 시간표 추천 및 졸업 요건 분석에만 활용됩니다.</div>
         </section>
-
         <aside className="card summary-card purple-tint">
           <h3>입력 정보 요약</h3>
           <div className="profile-row">
@@ -312,41 +234,118 @@ function BasicInfo({ setStep }) {
   );
 }
 
-function SummaryLine({ icon, label, value }) {
-  return (
-    <div className="summary-line">
-      <span><Icon type={icon} />{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
+// ── 2단계: 학업 이력 ───────────────────────────────────────────────────
+function AcademicHistory({ courseHistory, setCourseHistory, mandatoryGe, setMandatoryGe, basicInfo, setStep }) {
+  const [activeTab, setActiveTab] = useState("history");
+  const grade = gradeStrToInt(basicInfo.grade);
+  const isFirstYear = grade === 1;
 
-function AcademicHistory({ setStep }) {
+  const addCourse = () => {
+    setCourseHistory((prev) => [...prev, { year: "2025", semester: "1학기", name: "", retake: "아니오" }]);
+  };
+
+  const removeCourse = (idx) => {
+    setCourseHistory((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateCourse = (idx, key, val) => {
+    setCourseHistory((prev) => prev.map((c, i) => i === idx ? { ...c, [key]: val } : c));
+  };
+
+  const updateMge = (course, key, val) => {
+    setMandatoryGe((prev) => ({ ...prev, [course]: { ...prev[course], [key]: val } }));
+  };
+
+  const timeOptions = ["9:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+
   return (
     <PageShell step={2} title="학업 이력을 입력해주세요" subtitle="학년에 따라 필요한 입력 화면만 보이도록 설계했습니다.">
       <div className="two-column academic-layout">
         <section className="card academic-card">
           <div className="tab-row">
-            <button>1학년 자동배정 과목</button>
-            <button className="active">기존 수강 이력</button>
+            {isFirstYear && (
+              <button className={activeTab === "auto" ? "active" : ""} onClick={() => setActiveTab("auto")}>
+                1학년 자동배정 과목
+              </button>
+            )}
+            <button className={activeTab === "history" ? "active" : ""} onClick={() => setActiveTab("history")}
+              style={!isFirstYear ? { gridColumn: "1 / -1" } : {}}>
+              기존 수강 이력
+            </button>
           </div>
-          <div className="course-table">
-            <div className="course-head">
-              <span>수강연도</span><span>학기</span><span>과목명</span><span>재수강 여부</span><span />
-            </div>
-            {courses.map((course) => (
-              <div className="course-row" key={`${course.year}-${course.name}`}>
-                <input value={course.year} readOnly />
-                <select value={course.semester} readOnly><option>{course.semester}</option></select>
-                <input value={course.name} readOnly />
-                <select value={course.retake} readOnly><option>{course.retake}</option></select>
-                <button className="trash"><Icon type="trash" /></button>
+
+          {activeTab === "history" && (
+            <>
+              <div className="course-table">
+                <div className="course-head">
+                  <span>수강연도</span><span>학기</span><span>과목명</span><span>재수강 여부</span><span />
+                </div>
+                {courseHistory.map((course, idx) => (
+                  <div className="course-row" key={idx}>
+                    <input value={course.year} onChange={(e) => updateCourse(idx, "year", e.target.value)} />
+                    <select value={course.semester} onChange={(e) => updateCourse(idx, "semester", e.target.value)}>
+                      <option>1학기</option><option>2학기</option>
+                    </select>
+                    <input value={course.name} placeholder="과목명 입력"
+                      onChange={(e) => updateCourse(idx, "name", e.target.value)} />
+                    <select value={course.retake} onChange={(e) => updateCourse(idx, "retake", e.target.value)}>
+                      <option>아니오</option><option>예</option>
+                    </select>
+                    <button className="trash" onClick={() => removeCourse(idx)}><Icon type="trash" /></button>
+                  </div>
+                ))}
               </div>
-            ))}
+              <button className="add-button" onClick={addCourse}>+ 과목 추가</button>
+            </>
+          )}
+
+          {activeTab === "auto" && isFirstYear && (
+            <div style={{ display: "grid", gap: 20, padding: "12px 0" }}>
+              {[
+                { key: "bisato", label: "비판적 사고와 토론" },
+                { key: "changsagl", label: "창조적 사고와 글쓰기" },
+              ].map(({ key, label }) => (
+                <div key={key} style={{ border: "1.5px solid #e1e3e8", borderRadius: 10, padding: 18 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 14, color: "var(--primary)" }}>{label}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    <label className="field" style={{ margin: 0 }}>
+                      <span className="field-label" style={{ fontSize: 13 }}>학기</span>
+                      <select value={mandatoryGe[key]?.semester ?? 1}
+                        onChange={(e) => updateMge(key, "semester", parseInt(e.target.value))}>
+                        <option value={1}>1학기</option><option value={2}>2학기</option>
+                      </select>
+                    </label>
+                    <label className="field" style={{ margin: 0 }}>
+                      <span className="field-label" style={{ fontSize: 13 }}>요일</span>
+                      <select value={mandatoryGe[key]?.day ?? "월"}
+                        onChange={(e) => updateMge(key, "day", e.target.value)}>
+                        {days.map((d) => <option key={d}>{d}</option>)}
+                      </select>
+                    </label>
+                    <label className="field" style={{ margin: 0 }}>
+                      <span className="field-label" style={{ fontSize: 13 }}>시작 시간</span>
+                      <select value={mandatoryGe[key]?.startTime ?? "9:00"}
+                        onChange={(e) => updateMge(key, "startTime", e.target.value)}>
+                        {timeOptions.map((t) => <option key={t}>{t}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              ))}
+              <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 800 }}>
+                <input type="checkbox" checked={mandatoryGe.jinjotamDone}
+                  onChange={(e) => setMandatoryGe((p) => ({ ...p, jinjotamDone: e.target.checked }))} />
+                전공별 진로탐색 이수 완료
+              </label>
+            </div>
+          )}
+
+          <div className="accordion-row">
+            <Icon type="book" />1학년 자동배정 과목: 비판적 사고와 토론 / 창조적 사고와 글쓰기 / 전공별 진로탐색 (요일·교시 입력)
+            <span>⌄</span>
           </div>
-          <button className="add-button">+ 과목 추가</button>
-          <div className="accordion-row"><Icon type="book" />1학년 자동배정 과목: 비판적 사고와 토론 / 창조적 사고와 글쓰기 / 전공별 진로탐색 (요일·교시 입력)<span>⌄</span></div>
         </section>
+
         <aside className="card guide-card">
           <h3>입력 가이드</h3>
           <GuideItem>1학년은 자동배정 과목 정보를 입력합니다.</GuideItem>
@@ -361,85 +360,106 @@ function AcademicHistory({ setStep }) {
   );
 }
 
-function GuideItem({ children }) {
-  return <p className="guide-item"><span />{children}</p>;
+// ── 3단계: 희망 조건 ───────────────────────────────────────────────────
+function CheckBox({ checked, label, onChange }) {
+  return (
+    <label className="checkbox-label" onClick={onChange} style={{ cursor: "pointer" }}>
+      <span className={`check-box ${checked ? "checked" : ""}`}>{checked ? "✓" : ""}</span>
+      {label}
+    </label>
+  );
 }
 
-function Preferences({ setStep }) {
-  const [freeDays, setFreeDays] = useState(["금"]);
-  const [campus, setCampus] = useState("mixed");
+function Preferences({ prefs, setPrefs, setStep }) {
+  const update = (key, val) => setPrefs((prev) => ({ ...prev, [key]: val }));
 
-  const toggleFreeDay = (day) => {
-    setFreeDays((prev) =>
-      prev.includes(day) ? prev.filter((item) => item !== day) : [...prev, day]
-    );
+  const toggleDay = (day) => {
+    update("freeDays", prefs.freeDays.includes(day)
+      ? prefs.freeDays.filter((d) => d !== day)
+      : [...prefs.freeDays, day]);
   };
 
-  const campusLabel = {
-    su: "수캠 위주",
-    un: "운캠 위주",
-    mixed: "혼재 가능",
-  }[campus];
+  const toggleTimePref = (pref) => {
+    update("timePrefs", prefs.timePrefs.includes(pref)
+      ? prefs.timePrefs.filter((p) => p !== pref)
+      : [...prefs.timePrefs, pref]);
+  };
+
+  const campusLabel = { su: "수캠 위주", un: "운캠 위주", mixed: "혼재 가능" }[prefs.campus];
+
+  const timePrefLabels = prefs.timePrefs.map((p) => ({
+    "오전수업피하기": "오전 수업 피하기",
+    "풀강피하기": "풀강 피하기",
+    "몰아듣기선호": "몰아듣기 선호",
+    "수업사이공백확보": "수업 사이 공강 확보",
+  }[p] ?? p)).join(", ");
+
+  const compositionLabel = { major: "전공 위주", ge: "교양 위주", balanced: "균형형" }[prefs.composition];
 
   return (
     <PageShell step={3} title="원하는 시간표 조건을 선택해주세요" subtitle="선택한 조건을 바탕으로 맞춤형 시간표를 추천합니다.">
       <div className="two-column pref-layout">
         <section className="card pref-card">
-          <h3 className="section-title-with-hint">
-            희망 공강 요일
-            <em>(중복선택 가능)</em>
-          </h3>
+          <h3 className="section-title-with-hint">희망 공강 요일<em>(중복선택 가능)</em></h3>
           <div className="day-grid">
             {days.map((day) => {
-              const selected = freeDays.includes(day);
+              const sel = prefs.freeDays.includes(day);
               return (
-                <button key={day} className={selected ? "selected" : ""} onClick={() => toggleFreeDay(day)}>
-                  {day}{selected && <span className="check-badge">✓</span>}
+                <button key={day} className={sel ? "selected" : ""} onClick={() => toggleDay(day)}>
+                  {day}{sel && <span className="check-badge">✓</span>}
                 </button>
               );
             })}
           </div>
           <hr />
-
           <div className="credit-campus-grid">
             <div>
               <h3>희망 학점</h3>
-              <select className="full-select" defaultValue="18학점"><option>18학점</option></select>
+              <select className="full-select" value={prefs.credits} onChange={(e) => update("credits", e.target.value)}>
+                {[12, 13, 14, 15, 16, 17, 18, 19].map((n) => <option key={n} value={`${n}학점`}>{n}학점</option>)}
+              </select>
             </div>
             <div>
               <h3>희망 캠퍼스</h3>
-              <select className="full-select" value={campus} onChange={(e) => setCampus(e.target.value)}>
+              <select className="full-select" value={prefs.campus} onChange={(e) => update("campus", e.target.value)}>
                 <option value="su">수캠 위주</option>
                 <option value="un">운캠 위주</option>
                 <option value="mixed">혼재 가능</option>
               </select>
             </div>
           </div>
-
           <hr />
           <h3>수업 시간 선호</h3>
           <div className="check-row">
-            <CheckBox checked label="오전 수업 피하기" />
-            <CheckBox label="풀강 피하기" />
-            <CheckBox label="몰아듣기 선호" />
-            <CheckBox checked label="수업 사이 공강 확보" />
+            {[
+              { key: "오전수업피하기", label: "오전 수업 피하기" },
+              { key: "풀강피하기", label: "풀강 피하기" },
+              { key: "몰아듣기선호", label: "몰아듣기 선호" },
+              { key: "수업사이공백확보", label: "수업 사이 공강 확보" },
+            ].map(({ key, label }) => (
+              <CheckBox key={key} label={label} checked={prefs.timePrefs.includes(key)}
+                onChange={() => toggleTimePref(key)} />
+            ))}
           </div>
           <hr />
           <h3>수업 구성 선호</h3>
           <div className="segment-row">
-            <button>전공 위주</button>
-            <button>교양 위주</button>
-            <button className="selected">균형형<span className="check-badge">✓</span></button>
+            {[{ v: "major", l: "전공 위주" }, { v: "ge", l: "교양 위주" }, { v: "balanced", l: "균형형" }].map(({ v, l }) => (
+              <button key={v} className={prefs.composition === v ? "selected" : ""} onClick={() => update("composition", v)}>
+                {l}{prefs.composition === v && <span className="check-badge">✓</span>}
+              </button>
+            ))}
           </div>
           <div className="notice"><Icon type="info" />선택한 조건은 추천 시간표 생성에 반영됩니다.</div>
         </section>
         <aside className="card summary-card purple-tint">
           <h3>선택 조건 요약</h3>
-          <SummaryLine icon="calendar" label="희망 공강" value={freeDays.length > 0 ? `${freeDays.join(", ")}요일` : "선택 안 함"} />
-          <SummaryLine icon="major" label="희망 학점" value="18학점" />
+          <SummaryLine icon="calendar" label="희망 공강"
+            value={prefs.freeDays.length > 0 ? `${prefs.freeDays.join(", ")}요일` : "선택 안 함"} />
+          <SummaryLine icon="major" label="희망 학점" value={prefs.credits} />
           <SummaryLine icon="calendar" label="희망 캠퍼스" value={campusLabel} />
-          <SummaryLine icon="clock" label="시간 선호" value="오전 수업 피하기, 수업 사이 공강 확보" />
-          <SummaryLine icon="balance" label="구성 선호" value="균형형" />
+          <SummaryLine icon="clock" label="시간 선호" value={timePrefLabels || "선택 안 함"} />
+          <SummaryLine icon="balance" label="구성 선호" value={compositionLabel} />
           <div className="guide-box"><Icon type="info" />선택한 조건은 이후 AI 분석 단계에서 시간표 추천 우선순위에 반영됩니다.</div>
         </aside>
       </div>
@@ -448,32 +468,120 @@ function Preferences({ setStep }) {
   );
 }
 
-function CheckBox({ checked, label }) {
-  return (
-    <label className="checkbox-label">
-      <span className={`check-box ${checked ? "checked" : ""}`}>{checked ? "✓" : ""}</span>
-      {label}
-    </label>
-  );
-}
+// ── 4단계: AI 분석 ─────────────────────────────────────────────────────
+function Analysis({ basicInfo, courseHistory, mandatoryGe, prefs, setApiResult, setStep }) {
+  const [status, setStatus] = useState("loading"); // loading | done | error
+  const [errorMsg, setErrorMsg] = useState("");
+  const [progress, setProgress] = useState(0); // 0~3
 
-function Analysis({ setStep }) {
+  useEffect(() => {
+    callApi();
+  }, []);
+
+  const callApi = async () => {
+    setProgress(1);
+    const grade = gradeStrToInt(basicInfo.grade);
+    const isFirstYear = grade === 1;
+
+    // ── 수강이력 변환 ──────────────────────────────────────────────
+    const history = courseHistory
+      .filter((c) => c.name.trim())
+      .map((c) => ({
+        year: parseInt(c.year),
+        semester: semesterStrToInt(c.semester),
+        course_name: c.name.trim(),
+        is_retake: c.retake === "예",
+      }));
+
+    // ── mandatory_ge 변환 ──────────────────────────────────────────
+    let mandatory_ge = { jinjotam_done: mandatoryGe.jinjotamDone };
+    if (isFirstYear) {
+      mandatory_ge = {
+        bisato_semester: mandatoryGe.bisato?.semester ?? null,
+        bisato_day: mandatoryGe.bisato?.day ?? null,
+        bisato_block: startTimeToBlock(mandatoryGe.bisato?.startTime),
+        changsagl_semester: mandatoryGe.changsagl?.semester ?? null,
+        changsagl_day: mandatoryGe.changsagl?.day ?? null,
+        changsagl_block: startTimeToBlock(mandatoryGe.changsagl?.startTime),
+        jinjotam_done: mandatoryGe.jinjotamDone,
+      };
+    } else {
+      // 2학년 이상: 비사토/창사글 semester만 (history에서 자동 파악)
+      mandatory_ge = {
+        bisato_semester: null, bisato_day: null, bisato_block: null,
+        changsagl_semester: null, changsagl_day: null, changsagl_block: null,
+        jinjotam_done: mandatoryGe.jinjotamDone,
+      };
+    }
+
+    setProgress(2);
+
+    // ── 전공학점 계산 ──────────────────────────────────────────────
+    const credits = parseInt(prefs.credits) || 18;
+    const desiredMajor = prefs.composition === "major" ? Math.round(credits * 0.7)
+      : prefs.composition === "ge" ? Math.round(credits * 0.3)
+      : Math.round(credits * 0.5);
+
+    const payload = {
+      name: basicInfo.name,
+      department: basicInfo.department,
+      studentId: basicInfo.studentId,
+      grade: basicInfo.grade,
+      semester: basicInfo.semester,
+      majorType: basicInfo.majorType,
+      subMajorDepartment: basicInfo.subMajorDepartment || null,
+      history,
+      mandatory_ge,
+      freeDays: prefs.freeDays,
+      campus: prefs.campus,
+      credits: prefs.credits,
+      time_prefs: prefs.timePrefs,
+      desired_major_credits: desiredMajor,
+      retake_priority: prefs.retakePriority,
+    };
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/recommend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "서버 오류");
+      setProgress(3);
+      setApiResult(data);
+      setStatus("done");
+      setTimeout(() => setStep(5), 800);
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg(err.message);
+    }
+  };
+
   return (
     <PageShell step={4} center>
       <div className="analysis-screen">
         <h2>AI가 시간표를 분석하고 있어요</h2>
-        <p>입력한 정보를 바탕으로 맞춤형 시간표를 생성하고 있습니다.</p>
+        <p>입력한 정보를 백엔드로 보내고 추천 시간표를 받아오는 중입니다.</p>
         <div className="ai-orbit">
           <div className="ai-inner">AI</div>
           <span className="orbit-dot" />
         </div>
         <div className="analysis-list">
-          <AnalysisItem done text="학업 이력 분석 중" />
-          <AnalysisItem done text="졸업 요건 확인 중" />
-          <AnalysisItem loading text="희망 조건 반영 중" />
-          <AnalysisItem text="추천 시간 생성 중" />
+          <AnalysisItem done={progress >= 1} loading={progress === 0} text="학업 이력 분석 중" />
+          <AnalysisItem done={progress >= 2} loading={progress === 1} text="졸업 요건 확인 중" />
+          <AnalysisItem done={progress >= 3} loading={progress === 2} text="백엔드 추천 요청 중" />
+          <AnalysisItem done={status === "done"} loading={progress === 3 && status !== "done"} text="추천 결과 정리 중" />
         </div>
-        <button className="analysis-button" onClick={() => setStep(5)}>분석 중...</button>
+        {status === "error" && (
+          <div className="notice" style={{ marginTop: 24, background: "#fff0f0", color: "#c0392b", maxWidth: 560, margin: "24px auto 0" }}>
+            <Icon type="info" />{errorMsg}
+          </div>
+        )}
+        <button className="analysis-button" style={{ opacity: status === "error" ? 1 : 0.5 }}
+          onClick={status === "error" ? callApi : undefined}>
+          {status === "error" ? "다시 시도" : "분석 중..."}
+        </button>
       </div>
     </PageShell>
   );
@@ -489,21 +597,18 @@ function AnalysisItem({ done, loading, text }) {
   );
 }
 
-function MiniTable({ faded = false }) {
-  const miniBlocks = [
-    { day: 2, time: 0 }, { day: 1, time: 1 }, { day: 3, time: 1 },
-    { day: 0, time: 2 }, { day: 2, time: 2 }, { day: 4, time: 2 },
-    { day: 3, time: 3 }, { day: 1, time: 4 }, { day: 4, time: 4 },
-  ];
+// ── 5단계: 추천 결과 ───────────────────────────────────────────────────
+function MiniTable({ courses = [] }) {
+  const blocks = courses.flatMap((c) => scheduleToBlocks(c.schedule, c.course_name, isStrongCategory(c.category)));
   return (
-    <div className={`mini-table ${faded ? "faded" : ""}`}>
+    <div className="mini-table">
       <div />
-      {days.map((day) => <span key={day}>{day}</span>)}
+      {days.map((d) => <span key={d}>{d}</span>)}
       {times.map((time, r) => (
         <React.Fragment key={time}>
           <strong>{time}</strong>
           {days.map((_, c) => {
-            const has = miniBlocks.some((b) => b.day === c && b.time === r);
+            const has = blocks.some((b) => b.day === c && b.time === r);
             return <div className="mini-cell" key={`${r}-${c}`}>{has && <i />}</div>;
           })}
         </React.Fragment>
@@ -512,72 +617,68 @@ function MiniTable({ faded = false }) {
   );
 }
 
-function Result({ setStep }) {
+function Result({ apiResult, setSelectedTimetable, setStep, basicInfo = {}, mandatoryGe = {} }) {
+  const timetables = apiResult?.timetables ?? [];
+  const bestIdx = timetables.reduce((bi, tt, i) => tt.score > (timetables[bi]?.score ?? 0) ? i : bi, 0);
+
+  // 추천결과 MiniTable에도 비사토·창사글 표시
+  const grade = gradeStrToInt(basicInfo.grade);
+  const targetSem = semesterStrToInt(basicInfo.semester?.split(" ")[1] ?? "1학기");
+  const mandatoryCoursesForMini = [];
+  if (grade === 1) {
+    const addMge = (info, name) => {
+      if (info?.day && info?.startTime && info?.semester === targetSem) {
+        const block = startTimeToBlock(info.startTime);
+        const blockStr = block === 1 ? "1-3" : block === 2 ? "4-6" : "7-9";
+        mandatoryCoursesForMini.push({
+          course_name: name, category: "공통교양", credits: 0,
+          schedule: `${info.day}/${blockStr}`, campus: "", is_retake: false,
+        });
+      }
+    };
+    addMge(mandatoryGe.bisato, "비판적사고와토론");
+    addMge(mandatoryGe.changsagl, "창조적사고와글쓰기");
+  }
+
+  const handleSelect = (idx) => {
+    setSelectedTimetable(idx);
+    setStep(6);
+  };
+
+  const tagClass = (label) => label === "공강최적형" ? "green-tag" : "tag";
+
   return (
-    <PageShell step={5} title="추천 시간표가 생성되었어요" subtitle="입력한 정보와 희망 조건을 바탕으로 추천된 시간표입니다." centerTitle>
+    <PageShell step={5} title="추천 시간표가 생성되었어요"
+      subtitle="입력한 정보와 희망 조건을 바탕으로 추천된 시간표입니다." centerTitle>
       <div className="result-grid">
-        {recommendationCards.map((card) => (
-          <article className={`card recommendation-card ${card.best ? "best" : ""}`} key={card.id}>
-            {card.best && <div className="best-badge">추천 시간표</div>}
+        {timetables.map((tt, idx) => (
+          <article className={`card recommendation-card ${idx === bestIdx ? "best" : ""}`} key={idx}>
+            {idx === bestIdx && <div className="best-badge">추천 시간표</div>}
             <div className="recommend-head">
-              <h3>{card.title}</h3>
-              <span className={card.tag === "공강최적형" ? "green-tag" : "tag"}>{card.tag}</span>
+              <h3>시간표 {idx + 1}</h3>
+              <span className={tagClass(tt.label)}>{tt.label}</span>
             </div>
             <div className="score-row">
-              <span><Icon type="cap" />{card.credit}</span>
+              <span><Icon type="cap" />총 {tt.total_credits + mandatoryCourses.reduce((s,c) => s + (c.credits ?? 0), 0)}학점</span>
               <span><Icon type="stack" />점수</span>
-              <span><Icon type="star" />{card.score}</span>
+              <span><Icon type="star" />{tt.score}</span>
             </div>
-            <MiniTable faded={!card.best} />
+            <MiniTable courses={[...mandatoryCoursesForMini, ...(tt.courses ?? [])]} />
             <div className="reason-box">
               <h4>추천 이유</h4>
-              <p>{card.reason}</p>
+              <p>{tt.reason_tags?.join(" / ")}</p>
             </div>
           </article>
         ))}
       </div>
-      <PrimaryButton onClick={() => setStep(6)} wide>자세히 보기</PrimaryButton>
+      <PrimaryButton onClick={() => handleSelect(bestIdx)} wide>자세히 보기</PrimaryButton>
     </PageShell>
   );
 }
 
-function Detail({ setStep }) {
-  return (
-    <PageShell step={6} title="추천 시간표 상세" subtitle="선택하신 추천 시간표의 상세 시간표와 졸업 이수 현황을 확인하세요." centerTitle>
-      <div className="two-column detail-layout">
-        <section className="card detail-table-card">
-          <div className="detail-head">
-            <h3>선택 시간표 2 <span>전공집중형</span></h3>
-            <div className="detail-score">
-              <span><Icon type="cap" />총 17학점</span>
-              <span><Icon type="stack" />점수 <strong>85.7</strong></span>
-            </div>
-          </div>
-          <FullSchedule />
-        </section>
-        <aside className="card graduation-card">
-          <h3>졸업 이수 현황</h3>
-          <GradLine icon="book" label="공통교양" value="9 / 15" />
-          <GradLine icon="cap" label="핵심교양" value="3 / 15" />
-          <GradLine icon="star" label="핵심전공" value="6 / 27" />
-          <GradLine icon="stack" label="심화전공" value="3 / 18" />
-          <GradLine icon="clock" label="총 이수" value="28 / 130" highlight />
-          <hr />
-          <h4>이 시간표 수강 시 반영 예상</h4>
-          <Progress label="공통교양" value={47} />
-          <Progress label="핵심교양" value={40} />
-          <Progress label="핵심전공" value={44} />
-          <Progress label="심화전공" value={44} />
-          <Progress label="총 이수" value={40} strong />
-          <div className="notice"><Icon type="info" />위 진행률은 현재 선택하신 시간표를 기준으로 예상되는 졸업 이수 기준입니다.</div>
-        </aside>
-      </div>
-      <PrimaryButton onClick={() => setStep(5)} wide>다음 추천 보기</PrimaryButton>
-    </PageShell>
-  );
-}
-
-function FullSchedule() {
+// ── 6단계: 시간표 상세 ─────────────────────────────────────────────────
+function FullSchedule({ courses = [] }) {
+  const blocks = courses.flatMap((c) => scheduleToBlocks(c.schedule, c.course_name, isStrongCategory(c.category)));
   return (
     <div className="full-schedule">
       <div className="corner" />
@@ -586,7 +687,7 @@ function FullSchedule() {
         <React.Fragment key={time}>
           <div className="time-title">{time}</div>
           {days.map((_, c) => {
-            const block = scheduleBlocks.find((item) => item.day === c && item.time === r);
+            const block = blocks.find((b) => b.day === c && b.time === r);
             return (
               <div className="schedule-cell" key={`${r}-${c}`}>
                 {block && <span className={block.strong ? "strong" : "light"}>{block.title}</span>}
@@ -599,47 +700,217 @@ function FullSchedule() {
   );
 }
 
-function GradLine({ icon, label, value, highlight }) {
+function GradLine({ icon, label, value, highlight, subItems }) {
   return (
-    <div className={`grad-line ${highlight ? "highlight" : ""}`}>
-      <span><Icon type={icon} />{label}</span>
-      <strong>{value}</strong>
+    <div>
+      <div className={`grad-line ${highlight ? "highlight" : ""}`}>
+        <span><Icon type={icon} />{label}</span>
+        <strong>{value}</strong>
+      </div>
+      {subItems && subItems.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "4px 0 8px 32px" }}>
+          {subItems.map(({ area, credit }) => (
+            <span key={area} style={{
+              fontSize: 12, fontWeight: 700, background: "#f0ebff",
+              color: "var(--primary)", borderRadius: 999, padding: "3px 10px",
+              border: "1px solid #ddd4ff"
+            }}>{area} {credit}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function Progress({ label, value, strong }) {
+function Progress({ label, earned, required, strong, subItems }) {
+  const pct = required > 0 ? Math.min(100, Math.round(earned / required * 100)) : 0;
   return (
-    <div className={`progress-row ${strong ? "strong" : ""}`}>
-      <span>{label}</span>
-      <div className="progress-track"><i style={{ width: `${value}%` }} /></div>
-      <em>{value}%</em>
+    <div>
+      <div className={`progress-row ${strong ? "strong" : ""}`}>
+        <span>{label}</span>
+        <div className="progress-track"><i style={{ width: `${pct}%` }} /></div>
+        <em>{earned}/{required}</em>
+      </div>
+      {subItems && subItems.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "2px 0 8px 0" }}>
+          {subItems.map(({ area, credit }) => (
+            <span key={area} style={{
+              fontSize: 12, fontWeight: 700, background: "#f0ebff",
+              color: "var(--primary)", borderRadius: 999, padding: "3px 10px",
+              border: "1px solid #ddd4ff"
+            }}>{area} {credit}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function PageShell({ step, title, subtitle, children, center, centerTitle }) {
+function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, basicInfo = {}, mandatoryGe = {} }) {
+  const timetables = apiResult?.timetables ?? [];
+  const gap = apiResult?.gap ?? {};
+  const tt = timetables[selectedTimetable] ?? timetables[0];
+
+  if (!tt) return <div style={{ padding: 40, textAlign: "center" }}>시간표 데이터가 없습니다.</div>;
+
+  // 비사토·창사글을 시간표 그리드에 표시하기 위해 courses에 추가
+  const grade = gradeStrToInt(basicInfo.grade);
+  const targetSem = semesterStrToInt(basicInfo.semester?.split(" ")[1] ?? "1학기");
+  const mandatoryCourses = [];
+  if (grade === 1) {
+    const admissionYear = parseInt(basicInfo.studentId?.substring(0, 4)) || 2024;
+    const mgeCredit = admissionYear >= 2026 ? 2 : 3;
+    const addMge = (info, name) => {
+      if (info?.day && info?.startTime && info?.semester === targetSem) {
+        const block = startTimeToBlock(info.startTime);
+        const blockStr = block === 1 ? "1-3" : block === 2 ? "4-6" : "7-9";
+        mandatoryCourses.push({
+          course_name: name,
+          category: "공통교양",
+          credits: mgeCredit,
+          schedule: `${info.day}/${blockStr}`,
+          campus: "",
+          is_retake: false,
+        });
+      }
+    };
+    addMge(mandatoryGe.bisato, "비판적사고와토론");
+    addMge(mandatoryGe.changsagl, "창조적사고와글쓰기");
+    if (targetSem === 1 && mandatoryGe.jinjotamDone === false) {
+      mandatoryCourses.push({
+        course_name: "전공별진로탐색",
+        category: "진로소양",
+        credits: 1,
+        schedule: "",
+        campus: "",
+        is_retake: false,
+      });
+    }
+  }
+  const allCourses = [...mandatoryCourses, ...(tt.courses ?? [])];
+
+  // 핵심교양 영역 breakdown (기존 이수 현황용)
+  const geBreakdown = tt.ge_area_breakdown ?? {};
+  const geCurrentItems = Object.entries(geBreakdown)
+    .filter(([, v]) => v.기존 > 0)
+    .map(([area, v]) => ({ area, credit: v.기존 }));
+
+  // 핵심교양 영역 breakdown (이번 시간표 반영 예상용)
+  const geAfterItems = Object.entries(geBreakdown)
+    .filter(([, v]) => (v.기존 + v.추가) > 0)
+    .map(([area, v]) => ({ area, credit: v.기존 + v.추가 }));
+
+  // 이번 시간표 수강 후 예상 학점 계산
+  const extraCredits = (category) =>
+    allCourses.filter((c) => c.category === category).reduce((s, c) => s + (c.credits ?? 0), 0);
+
+  const gCom = gap.common_ge ?? { earned: 0, required: 15 };
+  const gCore = gap.core_ge ?? { earned: 0, required: 15 };
+  const gCareer = gap.career_ge ?? { earned: 0, required: 3 };
+  const gMajor = gap.core_major ?? { earned: 0, required: 27 };
+  const gAdv = gap.advanced_major ?? { earned: 0, required: 21 };
+  const gTotal = gap.total ?? { earned: 0, required: 130 };
+
+  const handleNext = () => {
+    const next = (selectedTimetable + 1) % timetables.length;
+    setSelectedTimetable(next);
+  };
+
   return (
-    <main className={`page-shell ${center ? "center" : ""}`}>
-      <Stepper current={step} />
-      {title && <div className={`page-title ${centerTitle ? "center-title" : ""}`}><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>}
-      {children}
-    </main>
+    <PageShell step={6} title="추천 시간표 상세"
+      subtitle="선택하신 추천 시간표의 상세 시간표와 졸업 이수 현황을 확인하세요." centerTitle>
+      <div className="two-column detail-layout">
+        <section className="card detail-table-card">
+          <div className="detail-head">
+            <h3>선택 시간표 {selectedTimetable + 1} <span>{tt.label}</span></h3>
+            <div className="detail-score">
+              <span><Icon type="cap" />총 {tt.total_credits + mandatoryCourses.reduce((s,c) => s + (c.credits ?? 0), 0)}학점</span>
+              <span><Icon type="stack" />점수 <strong>{tt.score}</strong></span>
+            </div>
+          </div>
+          <FullSchedule courses={allCourses} />
+        </section>
+        <aside className="card graduation-card">
+          <h3>졸업 이수 현황</h3>
+          <GradLine icon="book" label="공통교양" value={`${gCom.earned} / ${gCom.required}`} />
+          <GradLine icon="cap" label="핵심교양" value={`${gCore.earned} / ${gCore.required}`} subItems={geCurrentItems} />
+          <GradLine icon="clock" label="진로소양" value={`${gCareer.earned} / ${gCareer.required}`} />
+          <GradLine icon="star" label="핵심전공" value={`${gMajor.earned} / ${gMajor.required}`} />
+          <GradLine icon="stack" label="심화전공" value={`${gAdv.earned} / ${gAdv.required}`} />
+          <GradLine icon="clock" label="총 이수" value={`${gTotal.earned} / ${gTotal.required}`} highlight />
+          <hr />
+          <h4>이 시간표 수강 시 반영 예상</h4>
+          <Progress label="공통교양"
+            earned={gCom.earned + extraCredits("공통교양")} required={gCom.required} />
+          <Progress label="핵심교양"
+            earned={gCore.earned + extraCredits("핵심교양")} required={gCore.required} subItems={geAfterItems} />
+          <Progress label="진로소양"
+            earned={gCareer.earned + extraCredits("진로소양")} required={gCareer.required} />
+          <Progress label="핵심전공"
+            earned={gMajor.earned + extraCredits("핵심전공")} required={gMajor.required} />
+          <Progress label="심화전공"
+            earned={gAdv.earned + extraCredits("심화전공")} required={gAdv.required} />
+          <Progress label="총 이수"
+            earned={gTotal.earned + tt.total_credits} required={gTotal.required} strong />
+          <div className="notice"><Icon type="info" />위 진행률은 현재 선택하신 시간표를 기준으로 예상되는 졸업 이수 기준입니다.</div>
+        </aside>
+      </div>
+      <PrimaryButton onClick={handleNext} wide>다음 추천 보기</PrimaryButton>
+    </PageShell>
   );
 }
 
+// ── 루트 App ───────────────────────────────────────────────────────────
 export default function App() {
   const [step, setStep] = useState(0);
 
+  const [basicInfo, setBasicInfo] = useState({
+    name: "", department: "", studentId: "", grade: "1학년",
+    semester: "2026년 1학기", majorType: "intensive", subMajorDepartment: "",
+  });
+
+  const [courseHistory, setCourseHistory] = useState([
+    { year: "2024", semester: "1학기", name: "", retake: "아니오" },
+  ]);
+
+  const [mandatoryGe, setMandatoryGe] = useState({
+    bisato: { semester: 1, day: "월", startTime: "9:00" },
+    changsagl: { semester: 1, day: "월", startTime: "9:00" },
+    jinjotamDone: false,
+  });
+
+  const [prefs, setPrefs] = useState({
+    freeDays: ["금"], campus: "mixed", credits: "18학점",
+    timePrefs: [], composition: "balanced", retakePriority: false,
+  });
+
+  const [apiResult, setApiResult] = useState(null);
+  const [selectedTimetable, setSelectedTimetable] = useState(0);
+
   const screen = useMemo(() => {
     if (step === 0) return <StartScreen setStep={setStep} />;
-    if (step === 1) return <BasicInfo setStep={setStep} />;
-    if (step === 2) return <AcademicHistory setStep={setStep} />;
-    if (step === 3) return <Preferences setStep={setStep} />;
-    if (step === 4) return <Analysis setStep={setStep} />;
-    if (step === 5) return <Result setStep={setStep} />;
-    return <Detail setStep={setStep} />;
-  }, [step]);
+    if (step === 1) return <BasicInfo basicInfo={basicInfo} setBasicInfo={setBasicInfo} setStep={setStep} />;
+    if (step === 2) return (
+      <AcademicHistory courseHistory={courseHistory} setCourseHistory={setCourseHistory}
+        mandatoryGe={mandatoryGe} setMandatoryGe={setMandatoryGe}
+        basicInfo={basicInfo} setStep={setStep} />
+    );
+    if (step === 3) return <Preferences prefs={prefs} setPrefs={setPrefs} setStep={setStep} />;
+    if (step === 4) return (
+      <Analysis basicInfo={basicInfo} courseHistory={courseHistory}
+        mandatoryGe={mandatoryGe} prefs={prefs}
+        setApiResult={setApiResult} setStep={setStep} />
+    );
+    if (step === 5) return (
+      <Result apiResult={apiResult} setSelectedTimetable={setSelectedTimetable} setStep={setStep}
+        basicInfo={basicInfo} mandatoryGe={mandatoryGe} />
+    );
+    return (
+      <Detail apiResult={apiResult} selectedTimetable={selectedTimetable}
+        setSelectedTimetable={setSelectedTimetable} setStep={setStep}
+        basicInfo={basicInfo} mandatoryGe={mandatoryGe} />
+    );
+  }, [step, basicInfo, courseHistory, mandatoryGe, prefs, apiResult, selectedTimetable]);
 
   return (
     <div className="app-root">
