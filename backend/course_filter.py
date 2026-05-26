@@ -139,17 +139,18 @@ def _is_relevant_course(row: pd.Series, student: Student) -> bool:
         if any(kw.replace(" ", "") in 개설학과 for kw in COLLEGE_KEYWORDS):
             return True
         my_aliases = get_dept_aliases(student.dept, student.original_dept)
+        개설학과_clean = 개설학과.replace(" ", "")
         if any(
-            alias.replace(" ", "") in 개설학과 or 개설학과 in alias.replace(" ", "")
+            alias.replace(" ", "") in 개설학과_clean or 개설학과_clean in alias.replace(" ", "")
             for alias in my_aliases
         ):
             return True
         if student.double_major_dept:
             double_aliases = get_dept_aliases(student.double_major_dept)
             if any(
-                alias.replace(" ", "") in 개설학과 or 개설학과 in alias.replace(" ", "")
-                for alias in double_aliases
-            ):
+                    alias.replace(" ", "") in 개설학과_clean or 개설학과_clean in alias.replace(" ", "")
+                    for alias in double_aliases
+                ):
                 return True
         return False
 
@@ -203,7 +204,13 @@ def filter_courses(
         return pd.DataFrame()
 
     all_courses = pd.concat(dfs, ignore_index=True)
-
+    '''
+    # 디버그: 전공 과목 개설학과 값 확인
+    major_rows = all_courses[all_courses["이수구분"].isin(["핵심전공", "심화전공"])]
+    print(major_rows["개설학과전공"].unique())
+    print(f"전공 과목 수: {len(major_rows)}")
+    print(major_rows[["교과목명", "이수구분", "개설학과전공"]].head(10).to_string())
+    '''
     # ② 이미 수강한 과목 제거 (하드)
     #    재수강 예정 과목은 get_effective_history()에서 이미 이전 이력이 제거됨
     #    → taken에 포함되지 않으므로 후보에 그대로 남음 (별도 처리 불필요)
@@ -280,25 +287,28 @@ if __name__ == "__main__":
 
     student = Student(
         name="홍길동",
-        dept="AI융합학부",
-        student_id="20230001",
-        grade=2,
-        current_semester=1,
+        dept="컴퓨터공학과",
+        student_id="20260001",
+        grade=1,
+        current_semester=2,
         track="전공심화",
         history=[
-            CourseHistory(2023, 1, "파이썬프로그래밍"),
-            CourseHistory(2023, 1, "자료구조"),
+            CourseHistory(2026, 1, "파이썬프로그래밍"),
+            CourseHistory(2026, 1, "IT개론"),
+            CourseHistory(2026, 1, "기초통계학"),
+            CourseHistory(2026, 1, "웹프로그래밍기초"),
+            CourseHistory(2026, 1, "미적분과벡터해석기초")
         ],
         mandatory_ge=MandatoryGE(
             bisato_semester=1, bisato_day="월", bisato_block=1,
-            changsagl_semester=2, changsagl_day="수", changsagl_block=2,
+            changsagl_semester=2, changsagl_day="수", changsagl_block=1,
         ),
     )
 
     filtered = filter_courses(
         student=student,
         target_year=2026,
-        target_semester=1,
+        target_semester=2,
         off_days=["금"],
         campus_pref=CAMPUS_PREF_SUJUNG,
     )

@@ -143,7 +143,8 @@ def _score_course(
         # 학년 일치: 1.0 / 1차이: 0.7 / 2차이: 0.4 / 3차이: 0.1
         roadmap_score = max(0.0, 1.0 - diff * 0.3)
     else:
-        roadmap_score = 0.3  # 로드맵에 없는 과목 기본값
+        # 로드맵에 없는 과목: 전공이면 0.5로 올려서 교양에 밀리지 않도록
+        roadmap_score = 0.5 if 이수구분 in ["핵심전공", "심화전공"] else 0.3
     score += roadmap_score * W_ROADMAP
 
     # ── 선이수 반영 점수 (W_PREREQ = 20) ──────────────────────────
@@ -157,6 +158,15 @@ def _score_course(
     else:
         prereq_score = 1.0  # 선이수 없는 과목은 감점 없음
     score += prereq_score * W_PREREQ
+
+    # ── 학년 부적합 심화전공 강력 감점 ────────────────────────────
+    # 1~2학년에게 심화전공은 사실상 추천 불가
+    # 로드맵 영역과 학년 차이가 2 이상이면 강한 페널티
+    if 이수구분 == "심화전공":
+        if student.grade <= 2:
+            score -= 40  # 1~2학년에겐 사실상 추천 안 되도록
+        elif roadmap_area is not None and (roadmap_area - student.grade) >= 2:
+            score -= 20  # 학년보다 2단계 이상 앞선 심화전공도 감점
 
     # ── 재수강 보너스 ──────────────────────────────────────────────
     if retake_priority and row.get("is_retake_target", False):
@@ -249,72 +259,70 @@ def _build_timetable(
     desired_major_credits: float,
     desired_double_credits: float,
     exclude_names: set[str] = None,
+    student_grade: int = 4,
 ) -> list[dict]:
-    """
-    점수 내림차순으로 과목을 탐욕적으로 선택해 시간표 1개 생성
-
-    Args:
-        scored_df           : 점수 계산된 후보 DataFrame (score 컬럼 포함)
-        mandatory_slots     : 비사토·창사글 확정 슬롯 (충돌 체크용)
-        desired_credits     : 희망 총 학점
-        desired_major_credits   : 희망 주전공 학점
-        desired_double_credits  : 희망 부/복수전공 학점
-        exclude_names       : 이 시간표에서 제외할 과목명 집합 (다양성 확보용)
-
-    Returns:
-        선택된 과목 dict 리스트
-    """
     if exclude_names is None:
         exclude_names = set()
 
-    # 점수 내림차순 정렬
     candidates = scored_df.sort_values("score", ascending=False).copy()
 
     selected: list[dict] = []
-    selected_slots: list[list[TimeSlot]] = [mandatory_slots]  # 비사토·창사글 먼저 확정
-    selected_names: set[str] = set()   # 이미 선택된 과목명 (분반 중복 방지)
+    selected_slots: list[list[TimeSlot]] = [mandatory_slots]
+    selected_names: set[str] = set()
     total_credits = 0.0
     major_credits = 0.0
-    double_credits = 0.0
 
-    for _, row in candidates.iterrows():
+    def try_add(row):
+        nonlocal total_credits, major_credits
         name = str(row.get("교과목명", ""))
         name_clean = name.replace(" ", "")
-
-        # 제외 목록 or 이미 선택된 과목(다른 분반 포함) → 스킵
-        if name_clean in exclude_names:
-            continue
-        if name_clean in selected_names:   # 분반 중복 제거
-            continue
-
+        if name_clean in exclude_names or name_clean in selected_names:
+            return False
         credit = float(row.get("학점_num", 0))
         if total_credits + credit > desired_credits:
-            continue  # 희망 학점 초과 → 건너뜀
-
+            return False
         slots: list[TimeSlot] = row.get("parsed_slots", [])
         if not slots:
-            continue  # 시간표 없는 과목 제외
-
-        # 시간/캠퍼스 충돌 체크
+            return False
         if conflicts_with_any(slots, selected_slots):
-            continue
-
-        # 전공 학점 한도 체크
+            return False
         이수구분 = str(row.get("이수구분", ""))
         if 이수구분 in ["핵심전공", "심화전공"]:
-            if not row.get("is_retake_target", False):  # 재수강은 예외
+            if not row.get("is_retake_target", False):
                 if major_credits + credit > desired_major_credits:
-                    continue
-        if 이수구분 in ["핵심전공", "심화전공"] and row.get("is_retake_target", False):
-            pass  # 재수강은 학점 한도 무시하고 우선 포함
-
-        # 선택 확정
+                    return False
         selected.append(row.to_dict())
         selected_slots.append(slots)
-        selected_names.add(name_clean)   # 분반 중복 방지용 이름 등록
+        selected_names.add(name_clean)
         total_credits += credit
         if 이수구분 in ["핵심전공", "심화전공"]:
             major_credits += credit
+        return True
+
+    # ── 1패스: 전공 먼저 채우기 (desired_major_credits 목표) ──────
+    for _, row in candidates.iterrows():
+        if major_credits >= desired_major_credits:
+            break
+        이수구분 = str(row.get("이수구분", ""))
+        if 이수구분 not in ["핵심전공", "심화전공"]:
+            continue
+        # 1~2학년엔 심화전공 1패스에서 완전 제외
+        if 이수구분 == "심화전공" and student_grade <= 2:
+            continue
+        try_add(row)
+    # ── 2패스: 나머지 학점 교양으로 채우기 ────────────────────────
+    for _, row in candidates.iterrows():
+        if total_credits >= desired_credits:
+            break
+        if str(row.get("이수구분", "")) not in ["핵심전공", "심화전공"]:
+            try_add(row)
+
+    # ── 3패스: 학점이 남으면 전공 추가 ───────────────────────────
+    for _, row in candidates.iterrows():
+        if total_credits >= desired_credits:
+            break
+        if str(row.get("이수구분", "")) in ["핵심전공", "심화전공"]:
+            try_add(row)
 
     return selected
 
@@ -384,9 +392,23 @@ def recommend(
     # ── 시간표 1: 균형형 (기본 최적) ──────────────────────────────
     courses1 = _build_timetable(
         df, mandatory_slots,
-        desired_credits, desired_major_credits, desired_double_credits
+        desired_credits, desired_major_credits, desired_double_credits,
+        student_grade=student.grade,
     )
     tt1 = _make_timetable(courses1, "균형형", mandatory_slots, gap, time_prefs)
+    # tt1 과목 중 교양 최하위 2개 추출 → tt2에서 제외해 다른 구성 유도
+    ge_in_tt1 = sorted(
+        [c for c in courses1 if c.get("이수구분") not in ["핵심전공", "심화전공"]],
+        key=lambda c: c.get("score", 0)
+    )
+    exclude2 = {c.get("교과목명", "").replace(" ", "") for c in ge_in_tt1[:2]}
+
+    # tt1 과목 중 전공 최하위 1개 추출 → tt3에서 제외해 다른 구성 유도
+    major_in_tt1 = sorted(
+        [c for c in courses1 if c.get("이수구분") in ["핵심전공", "심화전공"]],
+        key=lambda c: c.get("score", 0)
+    )
+    exclude3 = {c.get("교과목명", "").replace(" ", "") for c in major_in_tt1[:1]}
 
     # ── 시간표 2: 전공집중형 (전공 학점 한도 완화) ──────────────────
     # 전공 점수 가중치 올리고, 교양 점수 낮춰서 다른 구성 유도
@@ -398,7 +420,9 @@ def recommend(
         df2, mandatory_slots,
         desired_credits,
         min(desired_credits * 0.8, desired_major_credits + 3),  # 전공 한도 살짝 늘림
-        desired_double_credits
+        desired_double_credits,
+        exclude_names=exclude2,
+        student_grade=student.grade,
     )
     tt2 = _make_timetable(courses2, "전공집중형", mandatory_slots, gap, time_prefs)
 
@@ -409,7 +433,9 @@ def recommend(
 
     courses3 = _build_timetable(
         df3, mandatory_slots,
-        desired_credits, desired_major_credits, desired_double_credits
+        desired_credits, desired_major_credits, desired_double_credits,
+        exclude_names=exclude3,
+        student_grade=student.grade,
     )
     tt3 = _make_timetable(courses3, "공강최적형", mandatory_slots, gap, time_prefs)
 
@@ -531,6 +557,9 @@ def _generate_reason_tags(
         for course in courses:
             for slot in course.get("parsed_slots", []):
                 day_blocks.setdefault(slot.day, []).append(slot.block)
+         # 비사토·창사글 필수배정 슬롯도 포함
+        for slot in mandatory_slots:
+            day_blocks.setdefault(slot.day, []).append(slot.block)
 
         if TIME_PREF_NO_MORNING in time_prefs:
             morning_count = sum(1 for c in courses if any(s.block == 1 for s in c.get("parsed_slots", [])))
@@ -605,7 +634,7 @@ if __name__ == "__main__":
     OFF_DAYS          = ["금"]                  # 희망 공강 요일
     CAMPUS_PREF       = "수캠위주"               # 수캠위주 / 운캠위주 / 혼재가능
     DESIRED_CREDITS   = 18                      # 희망 총 학점
-    DESIRED_MAJOR     = 9                       # 희망 주전공 학점
+    DESIRED_MAJOR     = 15                       # 희망 주전공 학점
     RETAKE_PRIORITY   = False                   # 재수강 우선 추천 여부
     TIME_PREFS        = [                       # 수업시간 선호 (복수 선택 가능)
         TIME_PREF_NO_MORNING,   # 오전 수업 피하기

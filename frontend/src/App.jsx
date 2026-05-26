@@ -67,7 +67,7 @@ function buildMandatoryCourses(basicInfo, mandatoryGe, targetSem) {
   addMge(mandatoryGe.bisato, "비판적사고와토론");
   addMge(mandatoryGe.changsagl, "창조적사고와글쓰기");
 
-  if (targetSem === 1 && !mandatoryGe.jinjotamDone) {
+  if (targetSem === 1) {
     result.push({
       course_name: "전공별진로탐색",
       category: "진로소양",
@@ -684,7 +684,9 @@ function Result({ apiResult, setSelectedTimetable, setStep, basicInfo = {}, mand
             <MiniTable courses={[...mandatoryCourses, ...(tt.courses ?? [])]} />
             <div className="reason-box">
               <h4>추천 이유</h4>
-              <p>{tt.reason_tags?.join(" / ")}</p>
+              <p>{tt.reason_tags?.map(tag =>
+                tag.startsWith("총 ") ? `총 ${tt.total_credits + mandatoryCredits}학점` : tag
+              ).join(" / ")}</p>
             </div>
           </article>
         ))}
