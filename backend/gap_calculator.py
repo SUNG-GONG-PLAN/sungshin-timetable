@@ -186,10 +186,10 @@ def calculate_gap(student: Student) -> GraduationGap:
     bisato_credit = 2 if year >= 2026 else 3
     changsagl_credit = 2 if year >= 2026 else 3
 
-    if mandatory_ge.bisato_semester is not None:
+    if mandatory_ge.bisato_semester is not None and mandatory_ge.bisato_semester <= student.current_semester:
         gap.common_ge_earned += bisato_credit
         gap.total_earned += bisato_credit
-    if mandatory_ge.changsagl_semester is not None:
+    if mandatory_ge.changsagl_semester is not None and mandatory_ge.changsagl_semester <= student.current_semester:
         gap.common_ge_earned += changsagl_credit
         gap.total_earned += changsagl_credit
     if mandatory_ge.jinjotam_done:
@@ -321,6 +321,7 @@ if __name__ == "__main__":
             CourseHistory(2024,1,"비판적사고와토론"),
             CourseHistory(2024,1,"AI와 서비스디자인"),
             CourseHistory(2024,1,"디지털컨텐츠"),
+            #CourseHistory(2024,1,"전공별진로탐색"),
             CourseHistory(2024,2,"인공지능수학"),
             CourseHistory(2024,2,"C++프로그래밍"),
             CourseHistory(2024,2,"미적분과벡터해석기초"),

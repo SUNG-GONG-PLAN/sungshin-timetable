@@ -1,14 +1,38 @@
 # main.py
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from flask_cors import CORS
+import json
+import numpy as np
 
 from student import Student, MandatoryGE, CourseHistory
 from gap_calculator import calculate_gap, GraduationGap
 from course_filter import filter_courses
 from recommender import recommend, Timetable
 
+
+# ── JSON 직렬화 (numpy 타입 변환) ─────────────────────────────────────
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):  return int(obj)
+        if isinstance(obj, np.floating): return float(obj)
+        if isinstance(obj, np.bool_):    return bool(obj)
+        if isinstance(obj, np.ndarray):  return obj.tolist()
+        if isinstance(obj, set):         return list(obj)
+        return super().default(obj)
+
+
+def _json_response(data: dict, status: int = 200):
+    """NumpyEncoder를 사용해 JSON 응답 생성"""
+    return app.response_class(
+        response=json.dumps(data, cls=NumpyEncoder, ensure_ascii=False),
+        status=status,
+        mimetype="application/json"
+    )
+
+
 app = Flask(__name__)
 CORS(app)
+
 
 # ── 프론트 변수명 → 백엔드 변수명 변환 ───────────────────────────────
 MAJOR_TYPE_MAP = {
@@ -22,6 +46,7 @@ CAMPUS_MAP = {
     "mixed": "혼재가능",
 }
 
+
 def _parse_grade(grade_str: str) -> int:
     """"2학년" → 2"""
     try:
@@ -29,7 +54,8 @@ def _parse_grade(grade_str: str) -> int:
     except:
         return 1
 
-def _parse_semester(semester_str: str) -> tuple[int, int]:
+
+def _parse_semester(semester_str: str) -> tuple:
     """"2026년 1학기" → (2026, 1)"""
     try:
         parts = str(semester_str).replace("년", "").replace("학기", "").split()
@@ -37,7 +63,8 @@ def _parse_semester(semester_str: str) -> tuple[int, int]:
     except:
         return 2026, 1
 
-def _parse_student(data: dict) -> Student:
+
+def _parse_student(data: dict):
     grade = _parse_grade(data.get("grade", "1학년"))
     target_year, current_semester = _parse_semester(data.get("semester", "2026년 1학기"))
     track = MAJOR_TYPE_MAP.get(data.get("majorType", "intensive"), "전공심화")
@@ -64,18 +91,19 @@ def _parse_student(data: dict) -> Student:
         jinjotam_done=bool(mge_data.get("jinjotam_done", False)),
     )
 
-    return Student(
+    student = Student(
         name=str(data.get("name", "")),
-        dept=str(data.get("department", "")),      # 프론트: department
-        student_id=str(data.get("studentId", "")), # 프론트: studentId
+        dept=str(data.get("department", "")),
+        student_id=str(data.get("studentId", "")),
         grade=grade,
         current_semester=current_semester,
         track=track,
-        double_major_dept=data.get("subMajorDepartment") or None,  # 프론트: subMajorDepartment
+        double_major_dept=data.get("subMajorDepartment") or None,
         history=history,
         mandatory_ge=mandatory_ge,
         retake_courses=retake_courses,
-    ), target_year, current_semester
+    )
+    return student, target_year, current_semester
 
 
 def _gap_to_dict(gap: GraduationGap) -> dict:
@@ -116,23 +144,39 @@ def _timetable_to_dict(tt: Timetable) -> dict:
     }
 
 
+# ── 엔드포인트 ────────────────────────────────────────────────────────
 @app.route("/recommend", methods=["POST"])
 def recommend_endpoint():
     data = request.get_json()
     if not data:
-        return jsonify({"error": "JSON 데이터가 없습니다"}), 400
+        return _json_response({"error": "JSON 데이터가 없습니다"}, 400)
 
     try:
         student, target_year, target_semester = _parse_student(data)
         gap = calculate_gap(student)
 
         campus_pref     = CAMPUS_MAP.get(data.get("campus", "mixed"), "혼재가능")
-        off_days        = data.get("freeDays", [])          # 프론트: freeDays
+        off_days        = data.get("freeDays", [])
         desired_credits = int(str(data.get("credits", "18학점")).replace("학점", ""))
         desired_major   = int(data.get("desired_major_credits", 9))
         desired_double  = int(data.get("desired_double_credits", 0))
         retake_priority = bool(data.get("retake_priority", False))
         time_prefs      = data.get("time_prefs", [])
+
+        # 필수 자동배정 학점 차감
+        admission_year   = student.admission_year
+        bisato_credit    = 2 if admission_year >= 2026 else 3
+        changsagl_credit = 2 if admission_year >= 2026 else 3
+        mge = student.mandatory_ge
+        mandatory_used = 0
+        if mge.bisato_semester == target_semester and mge.bisato_day:
+            mandatory_used += bisato_credit
+        if mge.changsagl_semester == target_semester and mge.changsagl_day:
+            mandatory_used += changsagl_credit
+        grade_int = _parse_grade(data.get("grade", "1학년"))
+        if grade_int == 1 and target_semester == 1:
+            mandatory_used += 1
+        adjusted_credits = max(0, desired_credits - mandatory_used)
 
         filtered = filter_courses(
             student,
@@ -147,7 +191,7 @@ def recommend_endpoint():
             gap=gap,
             filtered_df=filtered,
             target_semester=target_semester,
-            desired_credits=desired_credits,
+            desired_credits=adjusted_credits,
             desired_major_credits=desired_major,
             desired_double_credits=desired_double,
             off_days=off_days,
@@ -156,21 +200,23 @@ def recommend_endpoint():
             time_prefs=time_prefs,
         )
 
-        return jsonify({
+        return _json_response({
             "status": "success",
             "gap": _gap_to_dict(gap),
             "timetables": [_timetable_to_dict(tt) for tt in timetables],
         })
 
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return _json_response({"error": str(e)}, 400)
     except Exception as e:
-        return jsonify({"error": f"서버 오류: {str(e)}"}), 500
+        import traceback
+        traceback.print_exc()   # 터미널에 상세 오류 출력 (디버깅용)
+        return _json_response({"error": f"서버 오류: {str(e)}"}, 500)
 
 
 @app.route("/health", methods=["GET"])
 def health_check():
-    return jsonify({"status": "ok"})
+    return _json_response({"status": "ok"})
 
 
 if __name__ == "__main__":

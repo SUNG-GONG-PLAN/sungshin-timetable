@@ -18,3 +18,5 @@ Thumbs.db
 # 문서 파일 (노션에서 관리)
 *.pdf
 *.docx
+
+~$*git
