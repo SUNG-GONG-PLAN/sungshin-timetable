@@ -20,3 +20,7 @@ Thumbs.db
 *.docx
 
 ~$*git
+
+git
+python
+frontend/node_modules/
