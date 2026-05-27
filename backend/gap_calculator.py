@@ -255,7 +255,14 @@ def calculate_gap(student: Student) -> GraduationGap:
                 for alias in my_aliases
             )
 
-            is_double_dept = double_dept and double_dept in 개설학과
+            #is_double_dept = double_dept and double_dept in 개설학과
+            from student import get_dept_aliases
+            #double_aliases = get_dept_aliases(double_dept) if double_dept else set()
+            double_aliases = get_dept_aliases(double_dept, double_dept) if double_dept else set()
+            is_double_dept = double_dept and any(
+                alias.replace(" ", "") in 개설학과 or 개설학과 in alias.replace(" ", "")
+                for alias in double_aliases
+            )
 
             if is_my_dept or is_college_wide:
                 add_major_credit(gap, 이수구분, credit, track,

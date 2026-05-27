@@ -842,7 +842,7 @@ function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, b
                 {isDouble ? "복수전공" : "부전공"} 이수 현황
               </h4>
               {isDouble && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+                <>
                   <GradLine icon="star"  label="복수 핵심"
                     value={`${gDCore.earned} / ${gDCore.required}`} />
                   <GradLine icon="stack" label="복수 심화"
@@ -1102,7 +1102,7 @@ input::placeholder { color: #c3c5cb; }
 .reason-box { border-top: 2px dotted #d8dbe5; padding-top: 18px; }
 .reason-box h4 { margin: 0 0 8px; color: var(--primary); font-size: 18px; }
 .reason-box p { margin: 0; color: #424854; font-weight: 700; line-height: 1.6; }
-.detail-layout { grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr); }
+.detail-layout { grid-template-columns: minmax(0, 1.4fr) minmax(420px, 1fr); }
 .detail-table-card { padding: 28px 24px; }
 .detail-head { display: flex; justify-content: space-between; align-items: center; margin: 0 0 22px; }
 .detail-head h3 { font-size: 28px; margin: 0; }
