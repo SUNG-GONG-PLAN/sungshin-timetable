@@ -826,12 +826,14 @@ function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, b
         </section>
         <aside className="card graduation-card">
           <h3>졸업 이수 현황</h3>
-          <GradLine icon="book"  label="공통교양" value={`${gCom.earned} / ${gCom.required}`} />
-          <GradLine icon="cap"   label="핵심교양" value={`${gCore.earned} / ${gCore.required}`} subItems={geCurrentItems} />
-          <GradLine icon="clock" label="진로소양" value={`${gCareer.earned} / ${gCareer.required}`} />
-          <GradLine icon="star"  label="핵심전공" value={`${gMajor.earned} / ${gMajor.required}`} />
-          <GradLine icon="stack" label="심화전공" value={`${gAdv.earned} / ${gAdv.required}`} />
-          <GradLine icon="clock" label="총 이수"  value={`${gTotal.earned} / ${gTotal.required}`} highlight />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+            <GradLine icon="book"  label="공통교양" value={`${gCom.earned} / ${gCom.required}`} />
+            <GradLine icon="cap"   label="핵심교양" value={`${gCore.earned} / ${gCore.required}`} subItems={geCurrentItems} />
+            <GradLine icon="clock" label="진로소양" value={`${gCareer.earned} / ${gCareer.required}`} />
+            <GradLine icon="star"  label="핵심전공" value={`${gMajor.earned} / ${gMajor.required}`} />
+            <GradLine icon="stack" label="심화전공" value={`${gAdv.earned} / ${gAdv.required}`} />
+            <GradLine icon="clock" label="총 이수"  value={`${gTotal.earned} / ${gTotal.required}`} highlight />
+          </div>
           
           <hr />
           {(isDouble || isMinor) && (
@@ -841,12 +843,12 @@ function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, b
                 {isDouble ? "복수전공" : "부전공"} 이수 현황
               </h4>
               {isDouble && (
-                <>
-                  <GradLine icon="star"  label="복수전공 핵심전공"
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+                  <GradLine icon="star"  label="복수 핵심"
                     value={`${gDCore.earned} / ${gDCore.required}`} />
-                  <GradLine icon="stack" label="복수전공 심화전공"
+                  <GradLine icon="stack" label="복수 심화"
                     value={`${gDAdv.earned} / ${gDAdv.required}`} />
-                </>
+                </div>
               )}
               <GradLine icon="cap" label={isDouble ? "복수전공 합계" : "부전공 합계"}
                 value={`${gFree.earned} / ${gFree.required}`} highlight />
