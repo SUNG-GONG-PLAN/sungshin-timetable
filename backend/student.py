@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 # AI융합학부 명칭 정규화
-AI_DEPT_ALIASES = {"AI융합학부", "AI", "지능형시스템","ioT","IoT"}
+AI_DEPT_ALIASES = {"AI융합학부", "AI", "지능형IoT","ioT","IoT"}
 # 학과명 변경 이력 정규화 (구 이름 → 현재 이름)
 DEPT_NAME_CHANGES = {
     "청정융합에너지공학과": "청정신소재공학과"
@@ -28,9 +28,9 @@ def get_dept_aliases(dept: str, original_dept:str=None) -> set:
     # AI융합학부 트랙 구분
     if dept == "AI융합학부":
         raw = (original_dept or "").replace(" ", "")
-        if raw in {"지능형시스템", "IoT", "ioT"}:
+        if raw in {"지능형IoT", "IoT", "ioT"}:
             # IoT 트랙 → 지능형시스템/IoT 개설 과목만
-            return {"AI융합학부", "지능형시스템", "IoT", "ioT"}
+            return {"AI융합학부", "지능형IoT", "IoT", "ioT"}
         else:
             # AI 트랙 (기본값) → AI 개설 과목만
             return {"AI융합학부", "AI"}

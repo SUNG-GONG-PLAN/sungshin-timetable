@@ -797,6 +797,11 @@ function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, b
   const gCareer= gap.career_ge      ?? { earned: 0, required: 3 };
   const gMajor = gap.core_major     ?? { earned: 0, required: 27 };
   const gAdv   = gap.advanced_major ?? { earned: 0, required: 21 };
+  const gDCore  = gap.double_major_core ?? { earned: 0, required: 0 };
+  const gDAdv   = gap.double_major_adv  ?? { earned: 0, required: 0 };
+  const gFree   = gap.free_track        ?? { earned: 0, required: 0 };
+  const isDouble = gap.track === "복수전공";
+  const isMinor  = gap.track === "부전공";
   const gTotal = gap.total          ?? { earned: 0, required: 130 };
 
   const handleNext = () => {
@@ -827,13 +832,44 @@ function Detail({ apiResult, selectedTimetable, setSelectedTimetable, setStep, b
           <GradLine icon="star"  label="핵심전공" value={`${gMajor.earned} / ${gMajor.required}`} />
           <GradLine icon="stack" label="심화전공" value={`${gAdv.earned} / ${gAdv.required}`} />
           <GradLine icon="clock" label="총 이수"  value={`${gTotal.earned} / ${gTotal.required}`} highlight />
+          
           <hr />
+          {(isDouble || isMinor) && (
+            <>
+              <hr />
+              <h4 style={{ margin: "14px 0 10px", color: "var(--primary)", fontSize: 15 }}>
+                {isDouble ? "복수전공" : "부전공"} 이수 현황
+              </h4>
+              {isDouble && (
+                <>
+                  <GradLine icon="star"  label="복수전공 핵심전공"
+                    value={`${gDCore.earned} / ${gDCore.required}`} />
+                  <GradLine icon="stack" label="복수전공 심화전공"
+                    value={`${gDAdv.earned} / ${gDAdv.required}`} />
+                </>
+              )}
+              <GradLine icon="cap" label={isDouble ? "복수전공 합계" : "부전공 합계"}
+                value={`${gFree.earned} / ${gFree.required}`} highlight />
+            </>
+          )}
           <h4>이 시간표 수강 시 반영 예상</h4>
           <Progress label="공통교양" earned={gCom.earned    + extraCredits("공통교양")} required={gCom.required} />
           <Progress label="핵심교양" earned={gCore.earned   + extraCredits("핵심교양")} required={gCore.required} subItems={geAfterItems} />
           <Progress label="진로소양" earned={gCareer.earned + extraCredits("진로소양")} required={gCareer.required} />
-          <Progress label="핵심전공" earned={gMajor.earned  + extraCredits("핵심전공")} required={gMajor.required} />
-          <Progress label="심화전공" earned={gAdv.earned    + extraCredits("심화전공")} required={gAdv.required} />
+          <Progress label="주전공 핵심"
+            earned={gMajor.earned + extraCredits("핵심전공")} required={gMajor.required} />
+          <Progress label="주전공 심화"
+            earned={gAdv.earned + extraCredits("심화전공")} required={gAdv.required} />
+          {isDouble && (
+            <>
+              <Progress label="복수 핵심" earned={gDCore.earned} required={gDCore.required} />
+              <Progress label="복수 심화" earned={gDAdv.earned}  required={gDAdv.required} />
+              <Progress label="복수 합계" earned={gFree.earned}  required={gFree.required} strong />
+            </>
+          )}
+          {isMinor && (
+            <Progress label="부전공" earned={gFree.earned} required={gFree.required} strong />
+          )}
           {/* 총 이수: 백엔드 tt.total_credits + 필수배정 mandatoryCredits */}
           <Progress label="총 이수"
             earned={gTotal.earned + tt.total_credits + mandatoryCredits}

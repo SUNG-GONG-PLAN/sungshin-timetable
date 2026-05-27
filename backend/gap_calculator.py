@@ -149,6 +149,7 @@ def calculate_gap(student: Student) -> GraduationGap:
         core_major_req = req["핵심 전공"]
         advanced_major_req = req["심화 전공"]
         free_required = req["복수전공_계"]
+        print("컬럼 목록:", list(req_df.columns))
         double_core_req = req["복수전공_핵심"]
         double_adv_req = req["복수전공_심화"]
     else:
@@ -193,13 +194,29 @@ def calculate_gap(student: Student) -> GraduationGap:
     # ── 수강이력 처리 ──────────────────────────────────────────────
     effective_history = student.get_effective_history()
 
+    # 필수교양 과목명 → 이수구분/학점 하드코딩 (개설강좌 파일에 없을 수 있음)
+    FIXED_COURSES = {
+        "비판적사고와토론":   ("공통교양", 3 if year >= 2026 else 3),
+        "창조적사고와글쓰기": ("공통교양", 3 if year >= 2026 else 3),
+        "전공별진로탐색":     ("진로소양", 1),
+    }
+
     for course in effective_history:
+        name_clean = course.course_name.replace(" ", "")
+
+        # 필수교양은 하드코딩 처리
+        if name_clean in {k.replace(" ", "") for k in FIXED_COURSES}:
+            matched_key = next(k for k in FIXED_COURSES if k.replace(" ", "") == name_clean)
+            이수구분, credit = FIXED_COURSES[matched_key]
+            gap.total_earned += credit
+            if 이수구분 == "공통교양":
+                gap.common_ge_earned += credit
+            elif 이수구분 == "진로소양":
+                gap.career_ge_earned += credit
+            continue
+
         info = get_course_info(course.course_name, course.year, course.semester, student.dept)
         if info is None:
-            continue
-        try:
-            credit = float(str(info["학점"]).split("/")[0])
-        except:
             continue
 
         이수구분 = info["이수구분"]
@@ -207,6 +224,11 @@ def calculate_gap(student: Student) -> GraduationGap:
         개설학과 = info["개설학과"]
         student_dept = student.dept.replace(" ", "")
         double_dept = student.double_major_dept.replace(" ", "") if student.double_major_dept else ""
+
+        try:
+            credit = float(str(info["학점"]).split("/")[0])
+        except:
+            continue
 
         gap.total_earned += credit
 
@@ -264,3 +286,54 @@ def calculate_gap(student: Student) -> GraduationGap:
             gap.missing_mandatory.append(course)
 
     return gap
+
+# 테스트
+if __name__ == "__main__":
+    
+    student = Student(
+        name="홍길동",
+        dept="AI융합학부",
+        student_id="20230001",
+        grade=2,
+        current_semester=1,
+        track="복수전공",
+        double_major_dept="바이오식품공학과",
+        history=[
+            CourseHistory(2023, 1, "파이썬 프로그래밍"),  # 공통교양
+            CourseHistory(2023, 1, "자료구조"),            # 공과대학 핵심전공
+            CourseHistory(2024, 1, "기능성 식품학"),       # 바이오식품 심화전공
+            CourseHistory(2023, 2, "기초통계실습"),        # 타과 → 일반선택
+            CourseHistory(2024, 1, "북한학"),              # 핵심교양
+            CourseHistory(2024, 1, "생명공학"),   # 바이오식품 핵심전공
+            CourseHistory(2025,1,"AI서비스설계") #AI핵심전공
+        ],
+        mandatory_ge=MandatoryGE(
+            bisato_semester=1, bisato_day="월", bisato_block=1,
+            changsagl_semester=2, changsagl_day="수", changsagl_block=2,
+            jinjotam_done=True
+            )
+        )
+        #retake_courses=[]
+    
+
+    gap = calculate_gap(student)
+
+    print("===== 졸업 갭 계산 결과 =====")
+    print(f"[교양]")
+    print(f"  공통교양:  {gap.common_ge_earned}/{gap.common_ge_required} (남은: {gap.common_ge_gap})")
+    print(f"  핵심교양:  {gap.core_ge_earned}/{gap.core_ge_required} (남은: {gap.core_ge_gap})")
+    print(f"  핵심교양 영역: {len(gap.core_ge_areas_earned)}/{gap.core_ge_areas_required}개 (이수: {', '.join(gap.core_ge_areas_earned) if gap.core_ge_areas_earned else '없음'})")
+    print(f"  진로소양:  {gap.career_ge_earned}/{gap.career_ge_required} (남은: {gap.career_ge_gap})")
+    print(f"[주전공]")
+    print(f"  핵심전공:  {gap.core_major_earned}/{gap.core_major_required} (남은: {gap.core_major_gap})")
+    print(f"  심화전공:  {gap.advanced_major_earned}/{gap.advanced_major_required} (남은: {gap.advanced_major_gap})")
+    if gap.track != "전공심화":
+        print(f"[자유선택 - {gap.track}]")
+        print(f"  이수:      {gap.free_track_earned}/{gap.free_track_required} (남은: {gap.free_track_gap})")
+        if gap.track == "복수전공":
+            print(f"  └ 핵심: {gap.double_major_core_earned}/{gap.double_major_core_required}")
+            print(f"  └ 심화: {gap.double_major_advanced_earned}/{gap.double_major_advanced_required}")
+    print(f"[총계]")
+    print(f"  총 이수:   {gap.total_earned}/{gap.total_required} (남은: {gap.total_gap})")
+    print(f"[미이수 필수교양] {gap.missing_mandatory}")
+    

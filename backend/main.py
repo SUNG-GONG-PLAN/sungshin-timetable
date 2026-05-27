@@ -119,6 +119,8 @@ def _gap_to_dict(gap: GraduationGap) -> dict:
         "missing_mandatory": gap.missing_mandatory,
         "track": gap.track,
         "free_track": {"earned": gap.free_track_earned, "required": gap.free_track_required},
+        "double_major_core": {"earned": gap.double_major_core_earned, "required": gap.double_major_core_required},
+        "double_major_adv":  {"earned": gap.double_major_advanced_earned, "required": gap.double_major_advanced_required},
     }
 
 

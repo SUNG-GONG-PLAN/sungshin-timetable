@@ -578,6 +578,17 @@ def _generate_reason_tags(
         if TIME_PREF_GAP in time_prefs:
             tags.append("수업 사이 여유 시간 확보")
 
+    # 선이수 이수 기반 추천 이유
+    taken_names = {c.get("교과목명", "").replace(" ", "") for c in courses}
+    # recommender에서 prereqs 접근 불가하므로 courses의 점수로 간접 판단
+    prereq_msgs = []
+    for c in courses:
+        name = c.get("교과목명", "")
+        # score에서 prereq 기여분이 높으면 선이수 충족 과목
+        if c.get("score", 0) > 60 and str(c.get("이수구분", "")) in ["핵심전공", "심화전공"]:
+            prereq_msgs.append(name)
+    if prereq_msgs:
+        tags.append(f"선이수 조건 충족 전공: {', '.join(prereq_msgs[:2])}")
     tags.append(f"총 {total_credits:.0f}학점")
 
     return tags
