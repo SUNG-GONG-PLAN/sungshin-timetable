@@ -299,14 +299,27 @@ def _build_timetable(
             major_credits += credit
         return True
 
-    # ── 1패스: 전공 먼저 채우기 (desired_major_credits 목표) ──────
+    # ── 1패스: 복수전공 과목 먼저 채우기 ─────────────────────────
+    double_credits = 0.0
+    for _, row in candidates.iterrows():
+        if double_credits >= desired_double_credits:
+            break
+        if not row.get("is_double_major", False):
+            continue
+        if str(row.get("이수구분", "")) not in ["핵심전공", "심화전공"]:
+            continue
+        if try_add(row):
+            double_credits += float(row.get("학점_num", 0))
+
+    # ── 2패스: 주전공 채우기 (desired_major_credits 목표) ─────────
     for _, row in candidates.iterrows():
         if major_credits >= desired_major_credits:
             break
+        if row.get("is_double_major", False):
+            continue  # 복수전공 과목은 이미 위에서 처리
         이수구분 = str(row.get("이수구분", ""))
         if 이수구분 not in ["핵심전공", "심화전공"]:
             continue
-        # 1~2학년엔 심화전공 1패스에서 완전 제외
         if 이수구분 == "심화전공" and student_grade <= 2:
             continue
         try_add(row)

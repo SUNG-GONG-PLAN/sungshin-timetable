@@ -224,6 +224,19 @@ def filter_courses(
     all_courses["is_retake_target"] = all_courses["교과목명"].str.replace(
         " ", "", regex=False
     ).isin(retake_set)
+    # 복수전공 학과 과목 마킹
+    if student.double_major_dept:
+        from student import get_dept_aliases
+        double_aliases = get_dept_aliases(student.double_major_dept, student.double_major_dept)
+        def is_double_major_course(row):
+            개설학과 = str(row.get("개설학과전공", "")).replace(" ", "")
+            return any(
+                alias.replace(" ", "") in 개설학과 or 개설학과 in alias.replace(" ", "")
+                for alias in double_aliases
+            )
+        all_courses["is_double_major"] = all_courses.apply(is_double_major_course, axis=1)
+    else:
+        all_courses["is_double_major"] = False
 
     # ③ 학과 무관 전공 과목 제거 (하드)
     all_courses = all_courses[
